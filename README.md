@@ -6,9 +6,14 @@ Setup and configuration are fully managed via a built-in web interface.
 
 ![clock - weather](assets/demo.gif) 
 
-3D Printable case available [here:](https://cults3d.com/en/3d-model/gadget/wifi-connected-led-matrix-clock-and-weather-station-esp8266-and-max7219)
 
-<img src="assets/image01.png" alt="3D Printable Case" width="" max-width="320px" />
+<img src="assets/image01.png" alt="3D Printable Case" width="320" max-width="320" />
+
+Get the 3D printable case!
+
+
+[![Download on Printables](https://img.shields.io/badge/Printables-Download-orange?logo=prusa)]([https://www.printables.com/...](https://www.printables.com/model/1344276-esptimecast-wi-fi-clock-weather-display))
+[![Available on Cults3D](https://img.shields.io/badge/Cults3D-Download-blue?logo=cults3d)]([https://cults3d.com/...](https://cults3d.com/en/3d-model/gadget/wifi-connected-led-matrix-clock-and-weather-station-esp8266-and-max7219))
 
 ---
 
@@ -68,7 +73,7 @@ The built-in web interface provides full configuration for:
 3. Click **Save Setting** – the device saves config, reboots, and connects.
 
 ### UI Example:
-<img src="assets/webui4.png" alt="Web Interface" width="" max-width="320px" />
+<img src="assets/webui4.png" alt="Web Interface" width="320">
 
 ---
 

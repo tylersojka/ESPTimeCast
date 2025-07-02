@@ -12,8 +12,9 @@ Setup and configuration are fully managed via a built-in web interface.
 Get the 3D printable case!
 
 
-[![Download on Printables](https://img.shields.io/badge/Printables-Download-orange?logo=prusa)]([https://www.printables.com/...](https://www.printables.com/model/1344276-esptimecast-wi-fi-clock-weather-display))
-[![Available on Cults3D](https://img.shields.io/badge/Cults3D-Download-blue?logo=cults3d)]([https://cults3d.com/...](https://cults3d.com/en/3d-model/gadget/wifi-connected-led-matrix-clock-and-weather-station-esp8266-and-max7219))
+[![Download on Printables](https://img.shields.io/badge/Printables-Download-orange?logo=prusa)](https://www.printables.com/model/1344276-esptimecast-wi-fi-clock-weather-display)
+[![Available on Cults3D](https://img.shields.io/badge/Cults3D-Download-blue?logo=cults3d)](https://cults3d.com/en/3d-model/gadget/wifi-connected-led-matrix-clock-and-weather-station-esp8266-and-max7219)
+
 
 ---
 

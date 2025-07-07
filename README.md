@@ -44,15 +44,21 @@ Get the 3D printable case!
 
 ## 🪛 Wiring
 
+
+
+ Note: although the pins are labeled differently in the V4, the positions are the same as the V3.x
+
 **Wemos D1 Mini (ESP8266) → MAX7219**
 
-| Wemos D1 Mini | MAX7219 |
-|:-------------:|:-------:|
-| GND           | GND     |
-| D6            | CLK     |
-| D7            | CS      |
-| D8            | DIN     |
-| 3V3           | VCC     |
+| Wemos D1 Mini (v3.x) | Wemos D1 Mini (v4.0) | MAX7219 |
+|:-------------:|:-------:|:-------:|
+| GND           | GND     | GND     |
+| D6            | 12      | CLK     |
+| D7            | 13      | CS      |
+| D8            | 15     | DIN     |
+| 3V3           | 3V3     | VCC     |
+
+<img src="assets/wiring.png" alt="Wiring" width="0" max-width="0" />
 
 ---
 

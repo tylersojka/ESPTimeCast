@@ -58,7 +58,10 @@ Get the 3D printable case!
 | D8            | 15     | DIN     |
 | 3V3           | 3V3     | VCC     |
 
-<img src="assets/wiring.png" alt="Wiring" width="0" max-width="0" />
+
+<img src="assets/wiring.png" alt="Wiring" width="800" />
+
+Note: Thanks to @Wood578Guy for the Wiring diagram and the info on V4
 
 ---
 

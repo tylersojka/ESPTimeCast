@@ -28,6 +28,7 @@ Get the 3D printable case!
 - **Temperature Unit Selector** (`C`, `F`, or `K` displays in temp mode only)
 - **Fallback AP Mode** for easy first-time setup or WiFi recovery, with `/ap_status` endpoint
 - **Timezone Selection** from IANA names (DST integrated on backend)
+- **Day of the week display** in multiple languages
 - **Persistent Config** stored in LittleFS, with backup/restore system
 - **Status Animations** for WiFi conection, AP mode, time syncing.
 - **Advanced Settings** panel with:
@@ -37,6 +38,7 @@ Get the 3D printable case!
   - Show **Humidity** toggle (display Humidity besides Temperature)
   - **Flip display** (180 degrees)
   - Adjustable display **brightness**
+  - Dimming Hours **Scheduling**
     
 ---
 
@@ -61,6 +63,7 @@ The built-in web interface provides full configuration for:
 - **WiFi settings** (SSID & Password)
 - **Weather settings** (OpenWeatherMap API key, City, Country, Units)
 - **Time zone** (will auto-populate if TZ is found)
+- **Day of the week** languages
 - **Display durations** for clock and weather (milliseconds)
 - **Advanced Settings** (see below)
 
@@ -69,9 +72,10 @@ The built-in web interface provides full configuration for:
 1. Power on the device. If WiFi fails, it auto-starts in AP mode:
    - **SSID:** `ESPTimeCast`
    - **Password:** `12345678`
-   - Open `http://192.168.4.1` in your browser.
+   - Open `http://192.168.4.1` or `http://setup.esp` in your browser.
 2. Set your WiFi and all other options.
 3. Click **Save Setting** – the device saves config, reboots, and connects.
+4. The device shows its local IP adress after boot so you can login again for setting changes
 
 ### UI Example:
 <img src="assets/webui4.png" alt="Web Interface" width="320">
@@ -91,8 +95,9 @@ Click the **cog icon** next to “Advanced Settings” in the web UI to reveal e
 - **Humidity**: Display Humidity besides Temperature
 - **Flip Display**: Invert the display vertically/horizontally
 - **Brightness**: 0 (dim) to 15 (bright)
+- **Dimming Feature**: Start time, end time and desired brightness selection 
 
-*Tip: Changing these options takes effect after saving and rebooting.*
+*Tip: Dont't forget to press the save button to keep your settings*
 
 ---
 
@@ -109,14 +114,15 @@ Click the **cog icon** next to “Advanced Settings” in the web UI to reveal e
 ## 🔧 Installation
 
 1. **Clone this repo**
-2. **Flash the ESP8266** using Arduino IDE or PlatformIO
-3. **Upload `/data` folder** with LittleFS uploader (see below)
+2. **Flash the ESP8266** using Arduino IDE or PlatformIO (Flash size "4MB FS:2MB OTA:~1019KB")
+4. **Upload `/data` folder** with LittleFS uploader (see below)
 
 ### Board Setup
 
 - Install ESP8266 board package:  
   `http://arduino.esp8266.com/stable/package_esp8266com_index.json`
 - Select **Wemos D1 Mini** (or your ESP8266 variant) in Tools → Board
+- Select Flash Size "4MB FS:2MB OTA:~1019KB" under Tools
 
 ### Dependencies
 

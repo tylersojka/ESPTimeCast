@@ -14,5 +14,6 @@
   "ntpServer2": "time.nist.gov",
   "twelveHourToggle": false,
   "showDayOfWeek": true,
-  "showHumidity": false
+  "showHumidity": false,
+  "language": "en"
 }

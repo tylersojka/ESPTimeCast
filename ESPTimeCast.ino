@@ -33,6 +33,8 @@ char openWeatherCountry[64] = "";
 char weatherUnits[12] = "metric";
 char timeZone[64] = "";
 char language[8] = "en";
+String mainDesc = "";
+String detailedDesc = "";
 
 // Timing and display settings
 unsigned long clockDuration = 10000;
@@ -47,11 +49,11 @@ char ntpServer2[64] = "time.nist.gov";
 
 // Dimming
 bool dimmingEnabled = false;
-int dimStartHour = 18;   // 6pm default
+int dimStartHour = 18;  // 6pm default
 int dimStartMinute = 0;
-int dimEndHour = 8;      // 8am default
+int dimEndHour = 8;  // 8am default
 int dimEndMinute = 0;
-int dimBrightness = 2;   // Dimming level (0-15)
+int dimBrightness = 2;  // Dimming level (0-15)
 
 // State management
 bool weatherCycleStarted = false;
@@ -67,7 +69,7 @@ bool weatherFetched = false;
 bool weatherFetchInitiated = false;
 bool isAPMode = false;
 char tempSymbol = '[';
-bool shouldFetchWeatherNow = false; // Flag to trigger immediate weather fetch
+bool shouldFetchWeatherNow = false;  // Flag to trigger immediate weather fetch
 
 unsigned long lastSwitch = 0;
 unsigned long lastColonBlink = 0;
@@ -94,6 +96,18 @@ int ipDisplayCount = 0;
 const int ipDisplayMax = 1;
 String pendingIpToShow = "";
 
+// Scroll flipped
+textEffect_t getEffectiveScrollDirection(textEffect_t desiredDirection, bool isFlipped) {
+  if (isFlipped) {
+    // If the display is horizontally flipped, reverse the horizontal scroll direction
+    if (desiredDirection == PA_SCROLL_LEFT) {
+      return PA_SCROLL_RIGHT;
+    } else if (desiredDirection == PA_SCROLL_RIGHT) {
+      return PA_SCROLL_LEFT;
+    }
+  }
+  return desiredDirection;  
+}
 
 // -----------------------------------------------------------------------------
 // Configuration Load & Save
@@ -192,10 +206,9 @@ void loadConfig() {
   Serial.println(F("[CONFIG] Configuration loaded."));
 
   if (doc.containsKey("showWeatherDescription"))
-  showWeatherDescription = doc["showWeatherDescription"];
-else
-  showWeatherDescription = false;
-
+    showWeatherDescription = doc["showWeatherDescription"];
+  else
+    showWeatherDescription = false;
 }
 
 // -----------------------------------------------------------------------------
@@ -254,7 +267,8 @@ void connectWiFi() {
       ipDisplayCount = 0;
       P.displayClear();
       P.setCharSpacing(1);
-      P.displayScroll(pendingIpToShow.c_str(), PA_CENTER, PA_SCROLL_LEFT, 120);
+      textEffect_t actualScrollDirection = getEffectiveScrollDirection(PA_SCROLL_LEFT, flipDisplay);
+      P.displayScroll(pendingIpToShow.c_str(), PA_CENTER, actualScrollDirection, 120);
       break;
     } else if (now - startAttemptTime >= timeout) {
       Serial.println(F("\r\n[WiFi] Failed. Starting AP mode..."));
@@ -282,7 +296,7 @@ void connectWiFi() {
 }
 
 // -----------------------------------------------------------------------------
-// Time/NTP Functions
+// Time / NTP Functions
 // -----------------------------------------------------------------------------
 void setupTime() {
   sntp_stop();
@@ -298,36 +312,59 @@ void setupTime() {
   ntpSyncSuccessful = false;
 }
 
-
 // -----------------------------------------------------------------------------
 // Utility
 // -----------------------------------------------------------------------------
 void printConfigToSerial() {
   Serial.println(F("========= Loaded Configuration ========="));
-  Serial.print(F("WiFi SSID: ")); Serial.println(ssid);
-  Serial.print(F("WiFi Password: ")); Serial.println(password);
-  Serial.print(F("OpenWeather City: ")); Serial.println(openWeatherCity);
-  Serial.print(F("OpenWeather Country: ")); Serial.println(openWeatherCountry);
-  Serial.print(F("OpenWeather API Key: ")); Serial.println(openWeatherApiKey);
-  Serial.print(F("Temperature Unit: ")); Serial.println(weatherUnits);
-  Serial.print(F("Clock duration: ")); Serial.println(clockDuration);
-  Serial.print(F("Weather duration: ")); Serial.println(weatherDuration);
-  Serial.print(F("TimeZone (IANA): ")); Serial.println(timeZone);
-  Serial.print(F("Days of the Week/Weather description language: ")); Serial.println(language);
-  Serial.print(F("Brightness: ")); Serial.println(brightness);
-  Serial.print(F("Flip Display: ")); Serial.println(flipDisplay ? "Yes" : "No");
-  Serial.print(F("Show 12h Clock: ")); Serial.println(twelveHourToggle ? "Yes" : "No");
-  Serial.print(F("Show Day of the Week: ")); Serial.println(showDayOfWeek ? "Yes" : "No");
-  Serial.print(F("Show Weather Description: "));Serial.println(showWeatherDescription ? "Yes" : "No");
-  Serial.print(F("Show Humidity ")); Serial.println(showHumidity ? "Yes" : "No");
-  Serial.print(F("NTP Server 1: ")); Serial.println(ntpServer1);
-  Serial.print(F("NTP Server 2: ")); Serial.println(ntpServer2);
-  Serial.print(F("Dimming Enabled: ")); Serial.println(dimmingEnabled);
-  Serial.print(F("Dimming Start Hour: ")); Serial.println(dimStartHour);
-  Serial.print(F("Dimming Start Minute: ")); Serial.println(dimStartMinute);
-  Serial.print(F("Dimming End Hour: ")); Serial.println(dimEndHour);
-  Serial.print(F("Dimming End Minute: ")); Serial.println(dimEndMinute);
-  Serial.print(F("Dimming Brightness: ")); Serial.println(dimBrightness);
+  Serial.print(F("WiFi SSID: "));
+  Serial.println(ssid);
+  Serial.print(F("WiFi Password: "));
+  Serial.println(password);
+  Serial.print(F("OpenWeather City: "));
+  Serial.println(openWeatherCity);
+  Serial.print(F("OpenWeather Country: "));
+  Serial.println(openWeatherCountry);
+  Serial.print(F("OpenWeather API Key: "));
+  Serial.println(openWeatherApiKey);
+  Serial.print(F("Temperature Unit: "));
+  Serial.println(weatherUnits);
+  Serial.print(F("Clock duration: "));
+  Serial.println(clockDuration);
+  Serial.print(F("Weather duration: "));
+  Serial.println(weatherDuration);
+  Serial.print(F("TimeZone (IANA): "));
+  Serial.println(timeZone);
+  Serial.print(F("Days of the Week/Weather description language: "));
+  Serial.println(language);
+  Serial.print(F("Brightness: "));
+  Serial.println(brightness);
+  Serial.print(F("Flip Display: "));
+  Serial.println(flipDisplay ? "Yes" : "No");
+  Serial.print(F("Show 12h Clock: "));
+  Serial.println(twelveHourToggle ? "Yes" : "No");
+  Serial.print(F("Show Day of the Week: "));
+  Serial.println(showDayOfWeek ? "Yes" : "No");
+  Serial.print(F("Show Weather Description: "));
+  Serial.println(showWeatherDescription ? "Yes" : "No");
+  Serial.print(F("Show Humidity "));
+  Serial.println(showHumidity ? "Yes" : "No");
+  Serial.print(F("NTP Server 1: "));
+  Serial.println(ntpServer1);
+  Serial.print(F("NTP Server 2: "));
+  Serial.println(ntpServer2);
+  Serial.print(F("Dimming Enabled: "));
+  Serial.println(dimmingEnabled);
+  Serial.print(F("Dimming Start Hour: "));
+  Serial.println(dimStartHour);
+  Serial.print(F("Dimming Start Minute: "));
+  Serial.println(dimStartMinute);
+  Serial.print(F("Dimming End Hour: "));
+  Serial.println(dimEndHour);
+  Serial.print(F("Dimming End Minute: "));
+  Serial.println(dimEndMinute);
+  Serial.print(F("Dimming Brightness: "));
+  Serial.println(dimBrightness);
   Serial.println(F("========================================"));
   Serial.println();
 }
@@ -614,38 +651,38 @@ void setupWebServer() {
     String lang = request->getParam("value", true)->value();
     strlcpy(language, lang.c_str(), sizeof(language));
     Serial.printf("[WEBSERVER] Set language to %s\n", language);
+    shouldFetchWeatherNow = true;
     request->send(200, "application/json", "{\"ok\":true}");
   });
 
   server.on("/set_weatherdesc", HTTP_POST, [](AsyncWebServerRequest *request) {
-  bool showDesc = false;
-  if (request->hasParam("value", true)) {
-    String v = request->getParam("value", true)->value();
-    showDesc = (v == "1" || v == "true" || v == "on");
-  }
-  showWeatherDescription = showDesc;
-  Serial.printf("[WEBSERVER] Set showWeatherDescription to %d\n", showWeatherDescription);
-  request->send(200, "application/json", "{\"ok\":true}");
-});
-
-server.on("/set_units", HTTP_POST, [](AsyncWebServerRequest *request) {
-  if (request->hasParam("value", true)) {
-    String v = request->getParam("value", true)->value();
-    if (v == "1" || v == "true" || v == "on") {
-      strcpy(weatherUnits, "imperial");
-      tempSymbol = ']'; // Fahrenheit symbol
-    } else {
-      strcpy(weatherUnits, "metric");
-      tempSymbol = '['; // Celsius symbol
+    bool showDesc = false;
+    if (request->hasParam("value", true)) {
+      String v = request->getParam("value", true)->value();
+      showDesc = (v == "1" || v == "true" || v == "on");
     }
-    Serial.printf("[WEBSERVER] Set weatherUnits to %s\n", weatherUnits);
-    shouldFetchWeatherNow = true;
+    showWeatherDescription = showDesc;
+    Serial.printf("[WEBSERVER] Set showWeatherDescription to %d\n", showWeatherDescription);
     request->send(200, "application/json", "{\"ok\":true}");
-  } else {
-    request->send(400, "application/json", "{\"error\":\"Missing value parameter\"}");
-  }
-});
+  });
 
+  server.on("/set_units", HTTP_POST, [](AsyncWebServerRequest *request) {
+    if (request->hasParam("value", true)) {
+      String v = request->getParam("value", true)->value();
+      if (v == "1" || v == "true" || v == "on") {
+        strcpy(weatherUnits, "imperial");
+        tempSymbol = ']';  // Fahrenheit symbol
+      } else {
+        strcpy(weatherUnits, "metric");
+        tempSymbol = '[';  // Celsius symbol
+      }
+      Serial.printf("[WEBSERVER] Set weatherUnits to %s\n", weatherUnits);
+      shouldFetchWeatherNow = true;
+      request->send(200, "application/json", "{\"ok\":true}");
+    } else {
+      request->send(400, "application/json", "{\"error\":\"Missing value parameter\"}");
+    }
+  });
 
   server.begin();
   Serial.println(F("[WEBSERVER] Web server started"));
@@ -660,21 +697,118 @@ void handleCaptivePortal(AsyncWebServerRequest *request) {
 // -----------------------------------------------------------------------------
 // Weather Fetching and API settings
 // -----------------------------------------------------------------------------
-String getValidLang(String lang) {
-  if (lang == "eo" || lang == "sw" || lang == "ja") {
-    return "en";
+String normalizeWeatherDescription(String str) {
+  str.replace("å", "a");
+  str.replace("ä", "a");
+  str.replace("à", "a");
+  str.replace("á", "a");
+  str.replace("â", "a");
+  str.replace("ã", "a");
+  str.replace("ā", "a");
+  str.replace("ă", "a");
+  str.replace("ą", "a");
+
+  str.replace("æ", "ae");
+
+  str.replace("ç", "c");
+  str.replace("č", "c");
+  str.replace("ć", "c");
+
+  str.replace("ď", "d");
+
+  str.replace("é", "e");
+  str.replace("è", "e");
+  str.replace("ê", "e");
+  str.replace("ë", "e");
+  str.replace("ē", "e");
+  str.replace("ė", "e");
+  str.replace("ę", "e");
+
+  str.replace("ğ", "g");
+  str.replace("ģ", "g");
+
+  str.replace("ĥ", "h");
+
+  str.replace("í", "i");
+  str.replace("ì", "i");
+  str.replace("î", "i");
+  str.replace("ï", "i");
+  str.replace("ī", "i");
+  str.replace("į", "i");
+
+  str.replace("ĵ", "j");
+
+  str.replace("ķ", "k");
+
+  str.replace("ľ", "l");
+  str.replace("ł", "l");
+
+  str.replace("ñ", "n");
+  str.replace("ń", "n");
+  str.replace("ņ", "n");
+
+  str.replace("ó", "o");
+  str.replace("ò", "o");
+  str.replace("ô", "o");
+  str.replace("ö", "o");
+  str.replace("õ", "o");
+  str.replace("ø", "o");
+  str.replace("ō", "o");
+  str.replace("ő", "o");
+
+  str.replace("œ", "oe");
+
+  str.replace("ŕ", "r");
+
+  str.replace("ś", "s");
+  str.replace("š", "s");
+  str.replace("ș", "s");
+  str.replace("ŝ", "s");
+
+  str.replace("ß", "ss");
+
+  str.replace("ť", "t");
+  str.replace("ț", "t");
+
+  str.replace("ú", "u");
+  str.replace("ù", "u");
+  str.replace("û", "u");
+  str.replace("ü", "u");
+  str.replace("ū", "u");
+  str.replace("ů", "u");
+  str.replace("ű", "u");
+
+  str.replace("ŵ", "w");
+
+  str.replace("ý", "y");
+  str.replace("ÿ", "y");
+  str.replace("ŷ", "y");
+
+  str.replace("ž", "z");
+  str.replace("ź", "z");
+  str.replace("ż", "z");
+
+  str.toLowerCase();
+  // Filter out anything that's not a–z or space
+  String result = "";
+  for (unsigned int i = 0; i < str.length(); i++) {
+    char c = str.charAt(i);
+    if ((c >= 'a' && c <= 'z') || c == ' ') {
+      result += c;
+    }
+    // else: ignore punctuation, emoji, symbols
   }
-  return lang;
+  return result;
 }
 
-bool isNumber(const char* str) {
+bool isNumber(const char *str) {
   for (int i = 0; str[i]; i++) {
     if (!isdigit(str[i]) && str[i] != '.' && str[i] != '-') return false;
   }
   return true;
 }
 
-bool isFiveDigitZip(const char* str) {
+bool isFiveDigitZip(const char *str) {
   if (strlen(str) != 5) return false;
   for (int i = 0; i < 5; i++) {
     if (!isdigit(str[i])) return false;
@@ -688,14 +822,11 @@ String buildWeatherURL() {
   float lat = atof(openWeatherCity);
   float lon = atof(openWeatherCountry);
 
-  bool latValid = isNumber(openWeatherCity) && isNumber(openWeatherCountry) &&
-                  lat >= -90.0 && lat <= 90.0 &&
-                  lon >= -180.0 && lon <= 180.0;
+  bool latValid = isNumber(openWeatherCity) && isNumber(openWeatherCountry) && lat >= -90.0 && lat <= 90.0 && lon >= -180.0 && lon <= 180.0;
 
   if (latValid) {
     base += "lat=" + String(lat, 8) + "&lon=" + String(lon, 8);
-  } else if (isFiveDigitZip(openWeatherCity) &&
-             String(openWeatherCountry).equalsIgnoreCase("US")) {
+  } else if (isFiveDigitZip(openWeatherCity) && String(openWeatherCountry).equalsIgnoreCase("US")) {
     base += "zip=" + String(openWeatherCity) + "," + String(openWeatherCountry);
   } else {
     base += "q=" + String(openWeatherCity) + "," + String(openWeatherCountry);
@@ -703,6 +834,13 @@ String buildWeatherURL() {
 
   base += "&appid=" + String(openWeatherApiKey);
   base += "&units=" + String(weatherUnits);
+
+  String langForAPI = String(language);  // Start with the global language
+
+  if (langForAPI == "eo" || langForAPI == "sw" || langForAPI == "ja") {
+    langForAPI = "en";  // Override to "en" for the API
+  }
+  base += "&lang=" + langForAPI;
 
   return base;
 }
@@ -823,20 +961,28 @@ void fetchWeather() {
     currentHumidity = -1;
   }
 
-  if (doc.containsKey(F("weather")) && doc[F("weather")].is<JsonArray>() && doc[F("weather")][0].containsKey(F("main"))) {
-    const char *desc = doc[F("weather")][0][F("main")];
-    Serial.printf("[WEATHER] Description: %s\n", desc);
-    weatherDescription = String(desc);
+  if (doc.containsKey(F("weather")) && doc[F("weather")].is<JsonArray>()) {
+    JsonObject weatherObj = doc[F("weather")][0];
+    if (weatherObj.containsKey(F("main"))) {
+      mainDesc = weatherObj[F("main")].as<String>();
+    }
+    if (weatherObj.containsKey(F("description"))) {
+      detailedDesc = weatherObj[F("description")].as<String>();
+    }
   } else {
     Serial.println(F("[WEATHER] Weather description not found in JSON payload"));
   }
+
+  weatherDescription = normalizeWeatherDescription(detailedDesc);
+
+  Serial.printf("[WEATHER] Description used: %s\n", weatherDescription.c_str());
+
   weatherFetched = true;
 }
 
 // -----------------------------------------------------------------------------
 // Main setup() and loop()
 // -----------------------------------------------------------------------------
-
 /*
 DisplayMode key:
   0: Clock
@@ -845,7 +991,7 @@ DisplayMode key:
 */
 unsigned long descStartTime = 0;
 bool descScrolling = false;
-const unsigned long descriptionDuration = 3000; // 3s for short text
+const unsigned long descriptionDuration = 3000;  // 3s for short text
 
 void setup() {
   Serial.begin(115200);
@@ -884,16 +1030,16 @@ void setup() {
 void advanceDisplayMode() {
   int oldMode = displayMode;
   if (displayMode == 0) {
-    displayMode = 1; // clock -> weather
+    displayMode = 1;  // clock -> weather
   } else if (displayMode == 1 && showWeatherDescription && weatherAvailable && weatherDescription.length() > 0) {
-    displayMode = 2; // weather -> description
+    displayMode = 2;  // weather -> description
   } else {
-    displayMode = 0; // description (or weather if no desc) -> clock
+    displayMode = 0;  // description (or weather if no desc) -> clock
   }
   lastSwitch = millis();
   // Serial print for debugging
-  const char* modeName = displayMode == 0 ? "CLOCK" :
-                         displayMode == 1 ? "WEATHER" : "DESCRIPTION";
+  const char *modeName = displayMode == 0 ? "CLOCK" : displayMode == 1 ? "WEATHER"
+                                                                       : "DESCRIPTION";
   Serial.printf("[LOOP] Switching to display mode: %s\n", modeName);
 }
 
@@ -952,7 +1098,8 @@ void loop() {
     if (P.displayAnimate()) {
       ipDisplayCount++;
       if (ipDisplayCount < ipDisplayMax) {
-        P.displayScroll(pendingIpToShow.c_str(), PA_CENTER, PA_SCROLL_LEFT, 120);
+        textEffect_t actualScrollDirection = getEffectiveScrollDirection(PA_SCROLL_LEFT, flipDisplay);
+        P.displayScroll(pendingIpToShow.c_str(), PA_CENTER, actualScrollDirection, 120);
       } else {
         showingIp = false;
         P.displayClear();
@@ -977,28 +1124,29 @@ void loop() {
   static bool tzSetAfterSync = false;
 
   static unsigned long lastFetch = 0;
-  const unsigned long fetchInterval = 300000; // 5 minutes
+  const unsigned long fetchInterval = 300000;  // 5 minutes
 
   switch (ntpState) {
     case NTP_IDLE: break;
-    case NTP_SYNCING: {
-      time_t now = time(nullptr);
-      if (now > 1000) {
-        Serial.println(F("\n[TIME] NTP sync successful."));
-        ntpSyncSuccessful = true;
-        ntpState = NTP_SUCCESS;
-      } else if (millis() - ntpStartTime > ntpTimeout || ntpRetryCount > maxNtpRetries) {
-        Serial.println(F("\n[TIME] NTP sync failed."));
-        ntpSyncSuccessful = false;
-        ntpState = NTP_FAILED;
-      } else {
-        if (millis() - ntpStartTime > ((unsigned long)ntpRetryCount * 1000)) {
-          Serial.print(F("."));
-          ntpRetryCount++;
+    case NTP_SYNCING:
+      {
+        time_t now = time(nullptr);
+        if (now > 1000) {
+          Serial.println(F("\n[TIME] NTP sync successful."));
+          ntpSyncSuccessful = true;
+          ntpState = NTP_SUCCESS;
+        } else if (millis() - ntpStartTime > ntpTimeout || ntpRetryCount > maxNtpRetries) {
+          Serial.println(F("\n[TIME] NTP sync failed."));
+          ntpSyncSuccessful = false;
+          ntpState = NTP_FAILED;
+        } else {
+          if (millis() - ntpStartTime > ((unsigned long)ntpRetryCount * 1000)) {
+            Serial.print(F("."));
+            ntpRetryCount++;
+          }
         }
+        break;
       }
-      break;
-    }
     case NTP_SUCCESS:
       if (!tzSetAfterSync) {
         const char *posixTz = ianaToPosix(timeZone);
@@ -1021,25 +1169,24 @@ void loop() {
     if (!weatherFetchInitiated || shouldFetchWeatherNow || (millis() - lastFetch > fetchInterval)) {
       if (shouldFetchWeatherNow) {
         Serial.println(F("[LOOP] Immediate weather fetch requested by web server."));
-        shouldFetchWeatherNow = false; // Reset the flag after handling
+        shouldFetchWeatherNow = false;  // Reset the flag after handling
       } else if (!weatherFetchInitiated) {
         Serial.println(F("[LOOP] Initial weather fetch."));
       } else {
         Serial.println(F("[LOOP] Regular interval weather fetch."));
       }
-      
+
       weatherFetchInitiated = true;
-      weatherFetched = false; // Mark as not yet fetched
+      weatherFetched = false;  // Mark as not yet fetched
       fetchWeather();
       lastFetch = millis();
     }
   } else {
     weatherFetchInitiated = false;
     // It's good practice to reset the flag if WiFi disconnects to avoid stale requests
-    shouldFetchWeatherNow = false; 
+    shouldFetchWeatherNow = false;
   }
   // --- END MODIFIED WEATHER FETCHING LOGIC ---
-
 
   const char *const *daysOfTheWeek = getDaysOfWeek(language);
   const char *daySymbol = daysOfTheWeek[timeinfo.tm_wday];
@@ -1073,9 +1220,9 @@ void loop() {
   // --- Weather Description Mode handling ---
   static unsigned long descStartTime = 0;
   static bool descScrolling = false;
-  static unsigned long descScrollEndTime = 0;  // for post-scroll delay
-  const unsigned long descriptionDuration = 3000; // 3s for short text
-  const unsigned long descriptionScrollPause = 300; // 300ms pause after scroll
+  static unsigned long descScrollEndTime = 0;        // for post-scroll delay
+  const unsigned long descriptionDuration = 3000;    // 3s for short text
+  const unsigned long descriptionScrollPause = 300;  // 300ms pause after scroll
 
   // Only advance mode by timer for clock/weather, not description!
   unsigned long displayDuration = (displayMode == 0) ? clockDuration : weatherDuration;
@@ -1091,13 +1238,14 @@ void loop() {
     if (desc.length() > 8) {
       if (!descScrolling) {
         P.displayClear();
-        P.displayScroll(desc.c_str(), PA_CENTER, PA_SCROLL_LEFT, 100);
+        textEffect_t actualScrollDirection = getEffectiveScrollDirection(PA_SCROLL_LEFT, flipDisplay);
+        P.displayScroll(desc.c_str(), PA_CENTER, actualScrollDirection, 100);
         descScrolling = true;
-        descScrollEndTime = 0; // reset end time at start
+        descScrollEndTime = 0;  // reset end time at start
       }
       if (P.displayAnimate()) {
         if (descScrollEndTime == 0) {
-          descScrollEndTime = millis(); // mark the time when scroll finishes
+          descScrollEndTime = millis();  // mark the time when scroll finishes
         }
         // wait small pause after scroll stops
         if (millis() - descScrollEndTime > descriptionScrollPause) {
@@ -1106,7 +1254,7 @@ void loop() {
           advanceDisplayMode();
         }
       } else {
-        descScrollEndTime = 0; // reset if not finished
+        descScrollEndTime = 0;  // reset if not finished
       }
       yield();
       return;

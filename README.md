@@ -36,7 +36,7 @@ Get the 3D printable case!
   - **24/12h clock mode** toggle (24-hour default)
   - **Imperial Units (°F)** toggle (metric °C defaults)
   - Show **Humidity** toggle (display Humidity besides Temperature)
-  - **Weather description** toggle (display Rainy, Clouds, Thunderstorm etc.)
+  - **Weather description** toggle (displays: heavy rain, scattered clouds, thunderstorm etc.)
   - **Flip display** (180 degrees)
   - Adjustable display **brightness**
   - Dimming Hours **Scheduling**
@@ -104,12 +104,13 @@ Click the **cog icon** next to “Advanced Settings” in the web UI to reveal e
 - **24/12h Clock**: Switch between 24-hour and 12-hour time formats (24-hour default)
 - **Imperial Units (°F)** toggle (metric °C defaults)
 - **Humidity**: Display Humidity besides Temperature
-- **Weather description** toggle (display Rainy, Clouds, Thunderstorm etc. for 3 seconds)
+- **Weather description** toggle (display weather description in the selected language* for 3 seconds or scrolls once if description is too long)
 - **Flip Display**: Invert the display vertically/horizontally
 - **Brightness**: 0 (dim) to 15 (bright)
 - **Dimming Feature**: Start time, end time and desired brightness selection 
 
-*Tip: Dont't forget to press the save button to keep your settings*
+*Non-English characters converted to their closest English alphabet.  
+Tip: Dont't forget to press the save button to keep your settings
 
 ---
 

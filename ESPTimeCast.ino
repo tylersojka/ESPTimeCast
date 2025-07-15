@@ -3,7 +3,7 @@
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 #include <MD_Parola.h>
-#include <MD_MAX72XX.h>
+#include <MD_MAX72xx.h>
 #include <SPI.h>
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
@@ -106,7 +106,7 @@ textEffect_t getEffectiveScrollDirection(textEffect_t desiredDirection, bool isF
       return PA_SCROLL_LEFT;
     }
   }
-  return desiredDirection;  
+  return desiredDirection;
 }
 
 // -----------------------------------------------------------------------------
@@ -661,8 +661,22 @@ void setupWebServer() {
       String v = request->getParam("value", true)->value();
       showDesc = (v == "1" || v == "true" || v == "on");
     }
-    showWeatherDescription = showDesc;
-    Serial.printf("[WEBSERVER] Set showWeatherDescription to %d\n", showWeatherDescription);
+
+    // Check if the state is actually changing from true to false
+    if (showWeatherDescription == true && showDesc == false) {
+      Serial.println(F("[WEBSERVER] showWeatherDescription toggled OFF. Checking display mode..."));
+      // If we are currently in displayMode 2 (Weather Description)
+      if (displayMode == 2) {
+        Serial.println(F("[WEBSERVER] Currently in Weather Description mode. Forcing mode advance/cleanup."));
+        // Force an immediate mode advance.
+        // The advanceDisplayMode() function, as modified above, will handle the cleanup (P.displayClear() etc.)
+        // and transition to the next appropriate mode (likely clock).
+        advanceDisplayMode();
+      }
+    }
+
+    showWeatherDescription = showDesc;  // Update the global flag AFTER the check/action
+    Serial.printf("[WEBSERVER] Set Show Weather Description to %d\n", showWeatherDescription);
     request->send(200, "application/json", "{\"ok\":true}");
   });
 
@@ -989,9 +1003,12 @@ DisplayMode key:
   1: Weather
   2: Weather Description
 */
+// --- Weather Description Mode handling ---
 unsigned long descStartTime = 0;
 bool descScrolling = false;
-const unsigned long descriptionDuration = 3000;  // 3s for short text
+const unsigned long descriptionDuration = 3000;    // 3s for short text
+static unsigned long descScrollEndTime = 0;        // for post-scroll delay
+const unsigned long descriptionScrollPause = 300;  // 300ms pause after scroll
 
 void setup() {
   Serial.begin(115200);
@@ -1028,7 +1045,8 @@ void setup() {
 }
 
 void advanceDisplayMode() {
-  int oldMode = displayMode;
+  int oldMode = displayMode;  // Store the old mode
+
   if (displayMode == 0) {
     displayMode = 1;  // clock -> weather
   } else if (displayMode == 1 && showWeatherDescription && weatherAvailable && weatherDescription.length() > 0) {
@@ -1037,6 +1055,17 @@ void advanceDisplayMode() {
     displayMode = 0;  // description (or weather if no desc) -> clock
   }
   lastSwitch = millis();
+
+  // If we were in description mode (oldMode == 2) and are now switching out of it
+  // This handles both natural time-based transitions and forced transitions
+  if (oldMode == 2 && displayMode != 2) {
+    P.displayClear();       // Stop any ongoing scroll and clear the display
+    descScrolling = false;  // Reset scrolling flag
+    descStartTime = 0;      // Reset static text timer
+    descScrollEndTime = 0;  // Reset scroll end timer
+    Serial.println(F("[DISPLAY] Cleared display after exiting Description Mode (via advanceDisplayMode)."));
+  }
+
   // Serial print for debugging
   const char *modeName = displayMode == 0 ? "CLOCK" : displayMode == 1 ? "WEATHER"
                                                                        : "DESCRIPTION";
@@ -1162,7 +1191,11 @@ void loop() {
       ntpAnimFrame = 0;
       break;
   }
-
+  // Only advance mode by timer for clock/weather, not description!
+  unsigned long displayDuration = (displayMode == 0) ? clockDuration : weatherDuration;
+  if ((displayMode == 0 || displayMode == 1) && millis() - lastSwitch > displayDuration) {
+    advanceDisplayMode();
+  }
   // --- MODIFIED WEATHER FETCHING LOGIC ---
   if (WiFi.status() == WL_CONNECTED) {
     // Check if an immediate fetch is requested OR if the regular interval has passed
@@ -1215,19 +1248,6 @@ void loop() {
     formattedTime = String(daySymbol) + " " + String(timeSpacedStr);
   } else {
     formattedTime = String(timeSpacedStr);
-  }
-
-  // --- Weather Description Mode handling ---
-  static unsigned long descStartTime = 0;
-  static bool descScrolling = false;
-  static unsigned long descScrollEndTime = 0;        // for post-scroll delay
-  const unsigned long descriptionDuration = 3000;    // 3s for short text
-  const unsigned long descriptionScrollPause = 300;  // 300ms pause after scroll
-
-  // Only advance mode by timer for clock/weather, not description!
-  unsigned long displayDuration = (displayMode == 0) ? clockDuration : weatherDuration;
-  if ((displayMode == 0 || displayMode == 1) && millis() - lastSwitch > displayDuration) {
-    advanceDisplayMode();
   }
 
   // --- WEATHER DESCRIPTION Display Mode ---

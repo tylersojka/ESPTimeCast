@@ -93,7 +93,7 @@ int ntpRetryCount = 0;
 // Non-blocking IP display globals
 bool showingIp = false;
 int ipDisplayCount = 0;
-const int ipDisplayMax = 1;
+const int ipDisplayMax = 2;
 String pendingIpToShow = "";
 
 // Scroll flipped

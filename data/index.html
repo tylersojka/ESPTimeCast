@@ -24,6 +24,8 @@
     opacity: 0;
     transition: opacity 0.6s cubic-bezier(.4,0,.2,1);
     visibility: hidden;
+    height: 100%;
+    line-height: 1.5;
   }
 
   body.loaded {
@@ -67,7 +69,6 @@
   }  
   label {
     font-size: 0.9rem; 
-    margin-bottom: 0.25rem; 
     display: block; 
     margin-top: 0.75rem; 
   }
@@ -194,6 +195,18 @@ textarea::placeholder {
   select option {
     color: black;
   }
+  
+  .geo-disabled{
+    opacity: 0.5;
+    background: transparent;
+    border: 0.1rem white solid;
+    cursor: not-allowed;
+  }
+
+  .geo-disabled:hover{
+    transform: none;
+    box-shadow: none;
+  }
 
   @keyframes spin {
     0% { transform: rotate(0deg); }
@@ -303,10 +316,15 @@ textarea::placeholder {
     <input type="text" id="openWeatherCity" name="openWeatherCity" placeholder="City / Zip / Lat."/>    
     <input type="text" id="openWeatherCountry" name="openWeatherCountry" placeholder="Country Code / Long."/>  
   </div>
+  <button type="button" class="primary-button" id="geo-button" onclick="getLocation()" style="margin-top: 1rem;">Get My Location</button>
 
-  <div class="small">
-    Visit <a href="https://openweathermap.org/find" target="_blank" rel="noopener">OpenWeatherMap</a> to find your location.<br><br>
-    Location format examples: City, Country Code - Osaka, JP | ZIP,Country Code - 94040, US | Latitude, Longitude - 34.6937, 135.5023    
+  <div class="small">    
+    <strong>Location format examples:</strong> City, Country Code - Osaka, JP | ZIP,Country Code - 94040, US | Latitude, Longitude - 34.6937, 135.5023
+  </div>
+  <div class="geo-note" style="display: none;">
+    <br>
+    <span class="small"><strong>Note:</strong> External links and the "Get My Location" button require internet access.</span>
+    <span class="small">They won't work while the device is in AP Mode - connect to Wi-Fi first.</span>
   </div>
 
   <h2>Clock Settings</h2>
@@ -519,7 +537,7 @@ textarea::placeholder {
           </span>
         </label>
 
-              <!-- Brightness Slider with Value -->
+        <!-- Brightness Slider with Value -->
         <label style="margin-top: 1.75rem;">Brightness: <span id="brightnessValue">10</span></label>
         <input style="width: 100%;" type="range" min="0" max="15" name="brightness" id="brightnessSlider" value="10" 
         oninput="brightnessValue.textContent = brightnessSlider.value; setBrightnessLive(this.value);">
@@ -557,7 +575,8 @@ textarea::placeholder {
 </form>
 
 <div class="footer">
-  Project by: <a href="https://www.instagram.com/mfactory.osaka" target="_blank" rel="noopener noreferrer">M-Factory</a>
+  Project by: <a href="https://www.instagram.com/mfactory.osaka" target="_blank" rel="noopener noreferrer">M-Factory</a><br>
+  Location data by: <a href="https://www.geoplugin.com/" target="_blank">GeoPlugin</a>
 </div>
 
 <div id="savingMessage"></div>
@@ -593,7 +612,9 @@ window.onload = function () {
     .then(data => {
       isAPMode = (data.mode === "ap");
       if (isAPMode) {
-        document.querySelector('.footer').style.display = 'none';
+       document.querySelector('.geo-note').style.display = 'block';
+       document.getElementById('geo-button').classList.add('geo-disabled');
+       document.getElementById('geo-button').disabled = true;
       }
 
       document.getElementById('ssid').value = data.ssid || '';
@@ -764,18 +785,20 @@ async function submitConfig(event) {
     removeReloadButton();
     removeRestoreButton();
     if (isAPMode) {
-      updateSavingModal("✅ Settings saved successfully!<br><br><br>Rebooting the device now... ", false);
-
-      setTimeout(() => {
-        document.querySelector('html').style.height = '100%';
+      updateSavingModal("✅ Settings saved successfully!<br><br>Rebooting the device now... ", false);
+      setTimeout(() => {        
         document.getElementById('configForm').style.display = 'none';
-        updateSavingModal("✅ All done!<br><br><br>You can now close this tab safely.", false);
+        document.querySelector('.footer').style.display = 'none';
+        document.querySelector('html').style.height = '100vh';
+        document.body.style.height = '100vh';
+        document.getElementById('configForm').style.display = 'none';
+        updateSavingModal("✅ All done!<br>You can now close this tab safely.<br><br>Your device is now rebooting and connecting to your Wi-Fi. Its new IP address will appear on the display for future access.", false);
       }, 5000);
       return;
 
     } else {
-      updateSavingModal("✅ Configuration saved successfully.<br><br><br>Device will reboot", false);
-      setTimeout(() => location.reload(), 3000);
+      updateSavingModal("✅ Configuration saved successfully.<br><br>Device will reboot", false);
+      setTimeout(() => location.href = location.href.split('#')[0], 3000);
     }
   })
   .catch(err => {
@@ -784,10 +807,10 @@ async function submitConfig(event) {
     if (isAPMode && err.message.includes("Failed to fetch")) {
       console.warn("Expected disconnect in AP mode after reboot.");
       showSavingModal("");
-      updateSavingModal("✅ Settings saved successfully!<br><br><br>Rebooting the device now... ", false);
+      updateSavingModal("✅ Settings saved successfully!<br><br>Rebooting the device now... ", false);
       setTimeout(() => {
-        document.getElementById('configForm').style.display = 'none';
-        updateSavingModal("✅ All done!<br><br><br>You can now close this tab safely.", false);
+        document.getElementById('configForm').style.display = 'none'; 
+        updateSavingModal("✅ All done!<br>You can now close this tab safely.<br><br>Your device is now rebooting and connecting to your Wi-Fi. Its new IP address will appear on the display for future access.", false);
       }, 5000);
       removeReloadButton();
       removeRestoreButton();
@@ -1034,6 +1057,36 @@ function setDimmingFieldsEnabled(enabled) {
   document.getElementById('dimStartTime').disabled = !enabled;
   document.getElementById('dimEndTime').disabled = !enabled;
   document.getElementById('dimBrightness').disabled = !enabled;
+}
+
+function getLocation() {
+  fetch('http://www.geoplugin.net/json.gp')
+    .then(response => response.json())
+    .then(data => {
+      document.getElementById('openWeatherCity').value = data.geoplugin_latitude;
+      document.getElementById('openWeatherCountry').value = data.geoplugin_longitude;
+
+      const button = document.getElementById('geo-button');
+      let label = data.geoplugin_city;
+      if (!label) label = data.geoplugin_region;
+      if (!label) label = data.geoplugin_countryName;
+      if (!label) label = "Location Found";
+
+      button.textContent = "Location: " + label;
+      button.disabled = true;
+      button.classList.add('geo-disabled');
+
+      console.log("Location fetched via GeoPlugin. Consider crediting them: https://www.geoplugin.com/");
+    })
+    .catch(error => {
+      alert(
+        "Failed to guess your location.\n\n" +
+        "This may happen if:\n" +
+        "- You are using an AdBlocker (GeoPlugin might be blocked)\n" +
+        "- There is a network issue\n\n" +
+        "You can visit  https://openweathermap.org/find  to manually search for your city and get latitude/longitude."
+      );
+    });
 }
 
 </script>

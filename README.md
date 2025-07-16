@@ -89,7 +89,6 @@ The built-in web interface provides full configuration for:
 
 ### UI Example:
 <img src="assets/webui6.png" alt="Web Interface" width="320">
-<img src="assets/webui7.png" alt="Web Interface" width="320">
 
 ---
 

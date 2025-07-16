@@ -88,7 +88,8 @@ The built-in web interface provides full configuration for:
 4. The device shows its local IP adress after boot so you can login again for setting changes
 
 ### UI Example:
-<img src="assets/webui5.png" alt="Web Interface" width="320">
+<img src="assets/webui6.png" alt="Web Interface" width="320">
+<img src="assets/webui7.png" alt="Web Interface" width="320">
 
 ---
 

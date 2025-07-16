@@ -23,11 +23,11 @@ Get the 3D printable case!
 - **LED Matrix Display (8x32)** powered by MAX7219, with custom font support
 - **Simple Web Interface** for all configuration (WiFi, weather, time zone, display durations, and more)
 - **Automatic NTP Sync** with robust status feedback and retries
-- **Day of Week Display** with custom font
 - **Weather Fetching** from OpenWeatherMap (every 5 minutes, temp/humidity/description)
 - **Fallback AP Mode** for easy first-time setup or configuration
 - **Timezone Selection** from IANA names (DST integrated on backend)
-- **Day of the week display** in multiple languages
+- **Get My Location** button to get yoy aproximate Lat/Long.
+- **Week Day and Weather Description display** in multiple languages
 - **Persistent Config** stored in LittleFS, with backup/restore system
 - **Status Animations** for WiFi conection, AP mode, time syncing.
 - **Advanced Settings** panel with:
@@ -73,7 +73,7 @@ The built-in web interface provides full configuration for:
 - **WiFi settings** (SSID & Password)
 - **Weather settings** (OpenWeatherMap API key, City, Country, Coordinates)
 - **Time zone** (will auto-populate if TZ is found)
-- **Day of the week** languages
+- **Day of the Week and Weather Description** languages
 - **Display durations** for clock and weather (milliseconds)
 - **Advanced Settings** (see below)
 

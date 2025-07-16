@@ -87,6 +87,9 @@ The built-in web interface provides full configuration for:
 3. Click **Save Setting** – the device saves config, reboots, and connects.
 4. The device shows its local IP adress after boot so you can login again for setting changes
 
+*External links and the "Get My Location" button require internet access.  
+They won't work while the device is in AP Mode - connect to Wi-Fi first.
+
 ### UI Example:
 <img src="assets/webui6.png" alt="Web Interface" width="320">
 

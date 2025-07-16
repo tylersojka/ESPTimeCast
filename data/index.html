@@ -636,11 +636,7 @@ window.onload = function () {
       document.getElementById('showDayOfWeek').checked = !!data.showDayOfWeek;
       document.getElementById('showHumidity').checked = !!data.showHumidity;
       document.getElementById('showWeatherDescription').checked = !!data.showWeatherDescription;
-      document.getElementById('showWeatherDescription').addEventListener('change', function() {
-        setShowWeatherDescription(this.checked);
-      });
-
-            // Dimming controls
+      // Dimming controls
 const dimmingEnabledEl = document.getElementById('dimmingEnabled');
 const isDimming = (data.dimmingEnabled === true || data.dimmingEnabled === "true" || data.dimmingEnabled === 1);
 dimmingEnabledEl.checked = isDimming;

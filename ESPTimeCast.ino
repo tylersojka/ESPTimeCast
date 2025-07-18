@@ -1012,6 +1012,7 @@ const unsigned long descriptionScrollPause = 300;  // 300ms pause after scroll
 
 void setup() {
   Serial.begin(115200);
+  delay(1000);
   Serial.println();
   Serial.println(F("[SETUP] Starting setup..."));
 

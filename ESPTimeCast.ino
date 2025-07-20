@@ -1068,8 +1068,7 @@ void advanceDisplayMode() {
   }
 
   // Serial print for debugging
-  const char *modeName = displayMode == 0 ? "CLOCK" : displayMode == 1 ? "WEATHER"
-                                                                       : "DESCRIPTION";
+  const char *modeName = displayMode == 0 ? "CLOCK" : displayMode == 1 ? "WEATHER" : "DESCRIPTION";
   Serial.printf("[LOOP] Switching to display mode: %s\n", modeName);
 }
 

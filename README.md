@@ -210,4 +210,5 @@ The following table summarizes what will appear on the display in each scenario:
 If you enjoy this project, please consider supporting my work:
 
 [![Donate via PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg?logo=paypal)](https://www.paypal.me/officialuphoto)
+[![GitHub Sponsors](https://img.shields.io/badge/GitHub-Sponsor-fafbfc?logo=github&logoColor=ea4aaa)](https://github.com/sponsors/mfactory-osaka) 
 

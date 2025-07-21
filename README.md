@@ -207,5 +207,7 @@ The following table summarizes what will appear on the display in each scenario:
 
 ## ☕ Support this project
 
-If you like this project, you can [buy me a coffee](https://paypal.me/officialuphoto)!
+If you enjoy this project, please consider supporting my work:
+
+[![Donate via PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg?logo=paypal)](https://www.paypal.me/officialuphoto)
 

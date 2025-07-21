@@ -89,6 +89,8 @@ unsigned long ntpStartTime = 0;
 const int ntpTimeout = 30000;  // 30 seconds
 const int maxNtpRetries = 30;
 int ntpRetryCount = 0;
+unsigned long lastNtpStatusPrintTime = 0;
+const unsigned long ntpStatusPrintInterval = 1000; // Print status every 5 seconds (adjust as needed)
 
 // Non-blocking IP display globals
 bool showingIp = false;
@@ -224,9 +226,10 @@ void connectWiFi() {
 
   if (!credentialsExist) {
     Serial.println(F("[WIFI] No saved credentials. Starting AP mode directly."));
-    WiFi.mode(WIFI_AP);
-    WiFi.disconnect(true);
-    delay(100);
+    // Always explicitly set the mode before starting AP
+    WiFi.mode(WIFI_AP); 
+    WiFi.disconnect(true); // Disconnect from any prior connection (STA, AP_STA)
+    delay(100); // Give it a moment to clear
 
     if (strlen(DEFAULT_AP_PASSWORD) < 8) {
       WiFi.softAP(AP_SSID);
@@ -239,18 +242,31 @@ void connectWiFi() {
     IPAddress apIP(192, 168, 4, 1);
     WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
     dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
-    Serial.print(F("AP IP address: "));
+    Serial.print(F("[WIFI] AP IP address: "));
     Serial.println(WiFi.softAPIP());
     isAPMode = true;
+
+    WiFiMode_t mode = WiFi.getMode();
+    Serial.printf("[WIFI] WiFi mode after setting AP: %s\n", // Updated message for clarity
+                  mode == WIFI_OFF    ? "OFF" :
+                  mode == WIFI_STA    ? "STA ONLY" :
+                  mode == WIFI_AP     ? "AP ONLY" :
+                  mode == WIFI_AP_STA ? "AP + STA (Error!)" :
+                                        "UNKNOWN");
+
     Serial.println(F("[WIFI] AP Mode Started"));
     return;
   }
 
-  WiFi.disconnect(true);
-  delay(100);
-  WiFi.begin(ssid, password);
+  // If credentials exist, attempt STA connection
+  WiFi.mode(WIFI_STA); 
+  WiFi.disconnect(true); // Disconnect from any prior connection (AP, STA, or AP_STA)
+  delay(100); // Small delay for the mode change to take effect
+
+  WiFi.begin(ssid, password); // Attempts STA connection
   unsigned long startAttemptTime = millis();
-  const unsigned long timeout = 25000;
+
+  const unsigned long timeout = 30000; 
   unsigned long animTimer = 0;
   int animFrame = 0;
   bool animating = true;
@@ -260,6 +276,15 @@ void connectWiFi() {
     if (WiFi.status() == WL_CONNECTED) {
       Serial.println(F("[WIFI] Connected: ") + WiFi.localIP().toString());
       isAPMode = false;
+
+      WiFiMode_t mode = WiFi.getMode();
+      Serial.printf("[WIFI] WiFi mode after STA connection: %s\n", // Updated message
+                    mode == WIFI_OFF    ? "OFF" :
+                    mode == WIFI_STA    ? "STA ONLY" :
+                    mode == WIFI_AP     ? "AP ONLY" :
+                    mode == WIFI_AP_STA ? "AP + STA (Error!)" :
+                                          "UNKNOWN");
+
       animating = false;
 
       pendingIpToShow = WiFi.localIP().toString();
@@ -271,12 +296,23 @@ void connectWiFi() {
       P.displayScroll(pendingIpToShow.c_str(), PA_CENTER, actualScrollDirection, 120);
       break;
     } else if (now - startAttemptTime >= timeout) {
-      Serial.println(F("\r\n[WiFi] Failed. Starting AP mode..."));
+      Serial.println(F("[WiFi] Failed. Starting AP mode..."));
+      // If STA connection failed, explicitly switch to ONLY AP mode before starting softAP
+      WiFi.mode(WIFI_AP); 
       WiFi.softAP(AP_SSID, DEFAULT_AP_PASSWORD);
-      Serial.print(F("AP IP address: "));
+      Serial.print(F("[WiFi] AP IP address: "));
       Serial.println(WiFi.softAPIP());
       dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
       isAPMode = true;
+
+      WiFiMode_t mode = WiFi.getMode();
+      Serial.printf("[WIFI] WiFi mode after STA failure and setting AP: %s\n", 
+                    mode == WIFI_OFF    ? "OFF" :
+                    mode == WIFI_STA    ? "STA ONLY" :
+                    mode == WIFI_AP     ? "AP ONLY" :
+                    mode == WIFI_AP_STA ? "AP + STA (Error!)" :
+                                          "UNKNOWN");
+
       animating = false;
       Serial.println(F("[WIFI] AP Mode Started"));
       break;
@@ -301,7 +337,7 @@ void connectWiFi() {
 void setupTime() {
   sntp_stop();
   if (!isAPMode) {
-    Serial.println(F("[TIME] Starting NTP sync..."));
+    Serial.println(F("[TIME] Starting NTP sync"));
   }
   configTime(0, 0, ntpServer1, ntpServer2);
   setenv("TZ", ianaToPosix(timeZone), 1);
@@ -1033,7 +1069,18 @@ void setup() {
   P.setZoneEffect(0, flipDisplay, PA_FLIP_LR);
   Serial.println(F("[SETUP] Parola (LED Matrix) initialized"));
   connectWiFi();
-  Serial.println(F("[SETUP] Wifi connected"));
+
+
+  if (isAPMode) { // 'isAPMode' is set correctly within connectWiFi()
+    Serial.println(F("[SETUP] WiFi connection failed. Device is in AP Mode."));
+  } else if (WiFi.status() == WL_CONNECTED) {
+    Serial.println(F("[SETUP] WiFi connected successfully to local network."));
+  } else {
+    // This 'else' block should ideally not be hit if connectWiFi() always
+    // either connects or goes to AP mode. It's a safeguard.
+    Serial.println(F("[SETUP] WiFi state is uncertain after connection attempt."));
+  }
+
   setupWebServer();
   Serial.println(F("[SETUP] Webserver setup complete"));
   Serial.println(F("[SETUP] Setup complete"));
@@ -1157,21 +1204,28 @@ void loop() {
 
   switch (ntpState) {
     case NTP_IDLE: break;
-    case NTP_SYNCING:
+case NTP_SYNCING:
       {
         time_t now = time(nullptr);
-        if (now > 1000) {
-          Serial.println(F("\n[TIME] NTP sync successful."));
+        if (now > 1000) { // NTP sync successful
+          Serial.println(F("[TIME] NTP sync successful."));
           ntpSyncSuccessful = true;
           ntpState = NTP_SUCCESS;
-        } else if (millis() - ntpStartTime > ntpTimeout || ntpRetryCount > maxNtpRetries) {
-          Serial.println(F("\n[TIME] NTP sync failed."));
+        } else if (millis() - ntpStartTime > ntpTimeout || ntpRetryCount >= maxNtpRetries) {
+          Serial.println(F("[TIME] NTP sync failed."));
           ntpSyncSuccessful = false;
           ntpState = NTP_FAILED;
         } else {
-          if (millis() - ntpStartTime > ((unsigned long)ntpRetryCount * 1000)) {
-            Serial.print(F("."));
-            ntpRetryCount++;
+          // Periodically print a more descriptive status message
+          if (millis() - lastNtpStatusPrintTime >= ntpStatusPrintInterval) {
+            Serial.printf("[TIME] NTP sync in progress (attempt %d of %d)...\n", ntpRetryCount + 1, maxNtpRetries);
+            lastNtpStatusPrintTime = millis();
+          }
+
+          // Still increment ntpRetryCount based on your original timing for the timeout logic
+          // (even if you don't print a dot for every increment)
+          if (millis() - ntpStartTime > ((unsigned long)(ntpRetryCount + 1) * 1000UL)) {
+              ntpRetryCount++;
           }
         }
         break;
@@ -1208,7 +1262,6 @@ void loop() {
       } else {
         Serial.println(F("[LOOP] Regular interval weather fetch."));
       }
-
       weatherFetchInitiated = true;
       weatherFetched = false;  // Mark as not yet fetched
       fetchWeather();

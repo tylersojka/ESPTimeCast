@@ -1,5 +1,9 @@
 ![ESPTimeCast](assets/logo.svg)
 
+![GitHub stars](https://img.shields.io/github/stars/mfactory-osaka/ESPTimeCast?style=social)
+![GitHub forks](https://img.shields.io/github/forks/mfactory-osaka/ESPTimeCast?style=social)
+![Last Commit](https://img.shields.io/github/last-commit/mfactory-osaka/ESPTimeCast)
+
 **ESPTimeCast** is a WiFi-connected LED matrix clock and weather station based on ESP8266 and MAX7219.  
 It displays the current time, day of the week, and local weather (temp/humidity/weather description) fetched from OpenWeatherMap.  
 Setup and configuration are fully managed via a built-in web interface.  
@@ -26,10 +30,10 @@ Get the 3D printable case!
 - **Weather Fetching** from OpenWeatherMap (every 5 minutes, temp/humidity/description)
 - **Fallback AP Mode** for easy first-time setup or configuration
 - **Timezone Selection** from IANA names (DST integrated on backend)
-- **Get My Location** button to get your aproximate Lat/Long.
+- **Get My Location** button to get your approximate Lat/Long.
 - **Week Day and Weather Description display** in multiple languages
 - **Persistent Config** stored in LittleFS, with backup/restore system
-- **Status Animations** for WiFi conection, AP mode, time syncing.
+- **Status Animations** for WiFi connection, AP mode, time syncing.
 - **Advanced Settings** panel with:
   - Custom **Primary/Secondary NTP server** input
   - Display **Day of the Week** toggle (default is on)
@@ -85,7 +89,7 @@ The built-in web interface provides full configuration for:
    - Open `http://192.168.4.1` or `http://setup.esp` in your browser.
 2. Set your WiFi and all other options.
 3. Click **Save Setting** – the device saves config, reboots, and connects.
-4. The device shows its local IP adress after boot so you can login again for setting changes
+4. The device shows its local IP address after boot so you can login again for setting changes
 
 *External links and the "Get My Location" button require internet access.  
 They won't work while the device is in AP Mode - connect to Wi-Fi first.
@@ -130,7 +134,7 @@ Tip: Don't forget to press the save button to keep your settings
 
 ---
 
-## 🔧 Installation
+## 🚀 Getting Started
 
 1. **Clone this repo**
 2. **Flash the ESP8266** using Arduino IDE or PlatformIO (Flash size "4MB FS:2MB OTA:~1019KB")
@@ -189,7 +193,7 @@ The following table summarizes what will appear on the display in each scenario:
 - If "Show Weather Description" is enabled a third mode **Description** will display after the **Weather** display with a duration of 3 seconds.
 - In **Clock** mode, if NTP time is available, you’ll see the current time plus a unique day-of-week icon. If NTP is not available, you'll see `! NTP`.
 - In **Weather** mode, if weather is available, you’ll see the temperature (like `23ºC`). If weather is not available but time is, it falls back to showing the clock. If neither is available, you’ll see `! TEMP`.
-- All status/error messages (`! NTP`, `! TEMP`) are big icons shown on the dsiplay.
+- All status/error messages (`! NTP`, `! TEMP`) are big icons shown on the display.
 
 **Legend:**
 - 🗓️ **Day Icon**: Custom symbol for day of week (`@`, `=`, etc.)

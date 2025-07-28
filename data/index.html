@@ -75,6 +75,7 @@
   input[type="text"], 
   input[type="time"],   
   input[type="password"], 
+  input[type="date"],
   input[type="number"], select {
     width: 100%; padding: 0.75rem;
     border: 1.5px solid rgba(180, 230, 255, 0.08);
@@ -85,7 +86,9 @@
   }
 
   input[type="time"]:disabled ,
-  input[type="number"]:disabled {
+  input[type="text"]:disabled ,
+  input[type="number"]:disabled ,
+  input[type="date"]:disabled {
     color: rgba(255, 255, 255, 0.250);
   }
 
@@ -99,7 +102,7 @@
     background-color: #005ecb;
   }
 
-input[type="time"]::-webkit-calendar-picker-indicator{
+input[type="time"]::-webkit-calendar-picker-indicator, input[type="date"]::-webkit-calendar-picker-indicator{
   filter: invert(100%);
 }
 
@@ -459,17 +462,15 @@ textarea::placeholder {
       <label class="small">(Seconds)</label>
     </div>
   </div>
-  
-  <button type="button" class="collapsible-toggle" aria-expanded="false">
+ <button type="button" class="collapsible-toggle" aria-expanded="false">
     <span class="icon-area" aria-hidden="true">
       <svg width="20" height="20" viewBox="0 0 16 16" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-        <path  fill="currentColor" d="M16,9V7l-2.259-0.753c-0.113-0.372-0.262-0.728-0.441-1.066l1.066-2.131L12.95,1.634L10.819,2.7 c-0.338-0.178-0.694-0.325-1.066-0.441L9,0H7L6.247,2.259C5.875,2.372,5.519,2.522,5.181,2.7L3.05,1.638L1.638,3.05l1.066,2.131 C2.522,5.519,2.375,5.875,2.259,6.247L0,7v2l2.259,0.753c0.112,0.372,0.263,0.728,0.441,1.066L1.634,12.95l1.416,1.416L5.181,13.3 c0.338,0.178,0.694,0.328,1.066,0.441L7,16h2l0.753-2.259c0.372-0.113,0.728-0.262,1.066-0.441l2.131,1.066l1.416-1.416L13.3,10.819 c0.178-0.337,0.328-0.694,0.441-1.066L16,9z M8,11c-1.656,0-3-1.344-3-3s1.344-3,3-3s3,1.344,3,3S9.656,11,8,11z" />
+        <path  fill="currentColor" d="M16,9V7l-2.259-0.753c-0.113-0.372-0.262-0.728-0.441-1.066l1.066-2.131L12.95,1.634L10.819,2.7 c-0.338-0.178-0.694-0.325-1.066-0.441L9,0H7L6.247,2.259C5.875,2.372,5.519,2.522,5.181,2.7L3.05,1.638L1.638,3.05l1.066,2.131 C2.522,5.519,2.375,5.875,2.259,6.247L0,7v2l2.259,0.753c0.112,0.372,0.263,0.728,0.441,1.066L1.634,12.95l1.416,1.416L5.181,13.3 c0.338,0.178,0.694,0.328,1.066,0.441L7,16h2l0.753-2.259c0.372-0.113,0.728-0.262,1.066-0.441l2.131,1.066l1.416-1.416L13.3,10.819 c0.178-0.337,0.328-0.694,0.344-1.066L16,9z M8,11c-1.656,0-3-1.344-3-3s1.344-3,3-3s3,1.344,3,3S9.656,11,8,11z" />
       </svg>
     </span>
     <span>Advanced Settings</span>
     </button>
     <div class="collapsible-content" aria-hidden="true">
-      <!-- Custom NTP Servers -->
       <label>Primary NTP Server:</label>
       <input type="text" name="ntpServer1" id="ntpServer1" placeholder="Enter NTP address">
 
@@ -477,7 +478,6 @@ textarea::placeholder {
       <input type="text" name="ntpServer2" id="ntpServer2" placeholder="Enter NTP address">
       <div class="toggles" style="padding: 0 1rem;">
 
-        <!-- Day of the week Toggle (Styled) -->
         <label style="display: flex; align-items: center; margin-top: 1.75rem; justify-content: space-between;">
           <span style="margin-right: 0.5em;">Show Day of Week:</span>
           <span class="toggle-switch">
@@ -486,7 +486,6 @@ textarea::placeholder {
           </span>
         </label>
 
-        <!-- 24/12hrs Clock Toggle (Styled) -->
         <label style="display: flex; align-items: center; margin-top: 1.75rem; justify-content: space-between;">
           <span style="margin-right: 0.5em;">Display 12-hour Clock:</span>
           <span class="toggle-switch">
@@ -495,7 +494,6 @@ textarea::placeholder {
           </span>
         </label>
 
-        <!-- Imperial Units Toggle (Styled) -->
         <label style="display: flex; align-items: center; margin-top: 1.75rem; justify-content: space-between;">
           <span style="margin-right: 0.5em;">Use Imperial Units (°F):</span>
           <span class="toggle-switch">
@@ -504,7 +502,6 @@ textarea::placeholder {
           </span>
         </label>
 
-        <!-- Display humidity (Styled) -->
         <label style="display: flex; align-items: center; margin-top: 1.75rem; justify-content: space-between;">
           <span style="margin-right: 0.5em;">Show Humidity:</span>
           <span class="toggle-switch">
@@ -513,7 +510,6 @@ textarea::placeholder {
           </span>
         </label>
 
-        <!-- Show weather description -->
         <label style="display: flex; align-items: center; margin-top: 1.75rem; justify-content: space-between;">
           <span style="margin-right: 0.5em;">Show Weather Description:</span>
           <span class="toggle-switch">
@@ -522,7 +518,6 @@ textarea::placeholder {
           </span>
         </label>
 
-        <!-- Display Flip Toggle (Styled) -->
         <label style="display: flex; align-items: center; margin-top: 1.75rem; justify-content: space-between;">
           <span style="margin-right: 0.5em;">Flip Display (180°):</span>
           <span class="toggle-switch">
@@ -531,14 +526,12 @@ textarea::placeholder {
           </span>
         </label>
 
-        <!-- Brightness Slider with Value -->
         <label style="margin-top: 1.75rem;">Brightness: <span id="brightnessValue">10</span></label>
         <input style="width: 100%;" type="range" min="0" max="15" name="brightness" id="brightnessSlider" value="10" 
         oninput="brightnessValue.textContent = brightnessSlider.value; setBrightnessLive(this.value);">
         <br><br><br>
 
-          <!-- Dimming Controls -->
-        <label style="display: flex; align-items: center; justify-content: space-between;">
+          <label style="display: flex; align-items: center; justify-content: space-between;">
           <span style="margin-right: 0.5em;">Enable Dimming:</span>
           <span class="toggle-switch">
             <input type="checkbox" id="dimmingEnabled" name="dimmingEnabled">
@@ -561,9 +554,35 @@ textarea::placeholder {
         <label style="margin-top: 1.75rem;" for="dimBrightness">Dimming Brightness: <span id="dimmingBrightnessValue">2</span></label>
         <input style="width: 100%;" type="range" min="0" max="15" name="dimming_brightness" id="dimBrightness" value="2"
         oninput="dimmingBrightnessValue.textContent = dimBrightness.value; ">
-        <br><br>
-
-      </div>   
+        <br><br><br>
+        <div class="form-group">
+            <label style="display: flex; align-items: center; justify-content: space-between;">
+                <span style="margin-right: 0.5em;">Enable Countdown:</span>
+                <span class="toggle-switch">
+                    <input type="checkbox" id="countdownEnabled" name="countdownEnabled">
+                    <span class="toggle-slider"></span>
+                </span>
+            </label>
+        </div>
+        <div class="form-row two-col">
+          <div class="form-group">
+              <label for="countdownDate">Countdown Date:</label>
+              <input type="date" id="countdownDate" name="countdownDate" class="form-control">
+          </div>
+          <div class="form-group">
+              <label for="countdownTime">Countdown Time:</label>
+              <input type="time" id="countdownTime" name="countdownTime" class="form-control">
+          </div>
+        </div>
+        <div class="form-group">
+            <label for="countdownLabel">Countdown Label (Optional):</label>
+              <input type="text" id="countdownLabel" name="countdownLabel" class="form-control"
+              placeholder="e.g., BIRTHDAY, VACATION" maxlength="24"
+              pattern="[A-Z0-9 :!'.\-]*"
+              title="Only uppercase letters, numbers, space, and : ! ' - . allowed">
+            <div class="small">Only uppercase letters, numbers, space, and : ! ' - . allowed</div>
+        </div>
+        </div>   
     </div>
   <input type="submit" class="primary-button" value="Save Settings">
 </form>
@@ -574,7 +593,6 @@ textarea::placeholder {
 </div>
 
 <div id="savingMessage"></div>
-
 <script>
 let isSaving = false;
 let isAPMode = false;
@@ -658,6 +676,57 @@ document.getElementById('dimEndTime').value =
 
       setDimmingFieldsEnabled(!!data.dimmingEnabled);
 
+      // --- NEW: Populate Countdown Fields ---
+      const countdownEnabledEl = document.getElementById('countdownEnabled'); // Get reference
+      countdownEnabledEl.checked = !!(data.countdown && data.countdown.enabled);
+
+      if (data.countdown && data.countdown.targetTimestamp) {
+          // Convert Unix timestamp (seconds) to milliseconds for JavaScript Date object
+          const targetDate = new Date(data.countdown.targetTimestamp * 1000);
+          const year = targetDate.getFullYear();
+          // Month is 0-indexed in JS, so add 1
+          const month = (targetDate.getMonth() + 1).toString().padStart(2, '0');
+          const day = targetDate.getDate().toString().padStart(2, '0');
+          const hours = targetDate.getHours().toString().padStart(2, '0');
+          const minutes = targetDate.getMinutes().toString().padStart(2, '0');
+
+          document.getElementById('countdownDate').value = `${year}-${month}-${day}`;
+          document.getElementById('countdownTime').value = `${hours}:${minutes}`;
+      } else {
+          // Clear fields if no target timestamp is set
+          document.getElementById('countdownDate').value = '';
+          document.getElementById('countdownTime').value = '';
+      }
+      // --- END NEW ---
+
+      // --- NEW: Countdown Label Input Validation ---
+      const countdownLabelInput = document.getElementById('countdownLabel');
+      countdownLabelInput.addEventListener('input', function() {
+        // Convert to uppercase and remove any characters that are not A-Z or space
+        // Note: The `maxlength` attribute in HTML handles the length limit.
+        this.value = this.value.toUpperCase().replace(/[^A-Z0-9 :!'.\-]/g, '');
+      });
+      // Set initial value for countdownLabel from config.json (apply validation on load too)
+      if (data.countdown && data.countdown.label) {
+          countdownLabelInput.value = data.countdown.label.toUpperCase().replace(/[^A-Z0-9 :!'.\-]/g, '');
+      } else {
+          countdownLabelInput.value = '';
+      }
+      // --- END NEW ---
+
+
+      // --- NEW: Countdown Toggle Event Listener & Field Enabling ---
+      // If you're using onchange="setCountdownEnabled(this.checked)" directly in HTML,
+      // you would add setCountdownFieldsEnabled(this.checked) there as well.
+      // If you are using addEventListener, keep this:
+      countdownEnabledEl.addEventListener('change', function() {
+          setCountdownEnabled(this.checked);       // Sends command to ESP
+          setCountdownFieldsEnabled(this.checked); // Enables/disables local fields
+      });
+      // Set initial state of fields when page loads
+      setCountdownFieldsEnabled(countdownEnabledEl.checked);
+      // --- END NEW ---
+
       // Auto-detect browser's timezone if not set in config
       if (!data.timeZone) {
         try {
@@ -739,6 +808,14 @@ async function submitConfig(event) {
   formData.set('showWeatherDescription', document.getElementById('showWeatherDescription').checked ? 'on' : '');
   formData.set('weatherUnits', document.getElementById('weatherUnits').checked ? 'imperial' : 'metric');
 
+  // --- NEW: Countdown Form Data ---
+  formData.set('countdownEnabled', document.getElementById('countdownEnabled').checked ? 'true' : 'false');
+  // Date and Time inputs are already handled by formData if they have a 'name' attribute
+  // 'countdownDate' and 'countdownTime' are collected automatically
+  // Also apply the same validation for the label when submitting
+  const finalCountdownLabel = document.getElementById('countdownLabel').value.toUpperCase().replace(/[^A-Z0-9 :!'.\-]/g, '');
+  formData.set('countdownLabel', finalCountdownLabel);
+  // --- END NEW ---
 
   const params = new URLSearchParams();
   for (const pair of formData.entries()) {
@@ -1042,6 +1119,25 @@ function setWeatherUnits(val) {
   });
 }
 
+// --- Countdown Controls Logic ---
+// NEW: Function to enable/disable countdown specific fields
+function setCountdownFieldsEnabled(enabled) {
+  document.getElementById('countdownLabel').disabled = !enabled;
+  document.getElementById('countdownDate').disabled = !enabled;
+  document.getElementById('countdownTime').disabled = !enabled;
+}
+
+// Existing function to send countdown enable/disable command to ESP
+function setCountdownEnabled(val) {
+    fetch('/set_countdown_enabled', {
+        method: 'POST',
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: "value=" + (val ? 1 : 0) // Send 1 for true, 0 for false
+    });
+}
+// --- END Countdown Controls Logic ---
+
+
 // --- Dimming Controls Logic ---
 function setDimmingFieldsEnabled(enabled) {
   document.getElementById('dimStartTime').disabled = !enabled;
@@ -1073,12 +1169,12 @@ function getLocation() {
         "Failed to guess your location.\n\n" +
         "This may happen if:\n" +
         "- You are using an AdBlocker (GeoPlugin might be blocked)\n" +
-        "- There is a network issue\n\n" +
+        "- There is a network issue\n" +
+        "- The website might be temporarily down.\n\n" +
         "You can visit  https://openweathermap.org/find  to manually search for your city and get latitude/longitude."
       );
     });
 }
-
 </script>
 </body>
 </html>

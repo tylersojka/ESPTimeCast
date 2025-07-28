@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 #include <MD_Parola.h>
@@ -23,6 +24,10 @@
 
 MD_Parola P = MD_Parola(HARDWARE_TYPE, DATA_PIN, CLK_PIN, CS_PIN, MAX_DEVICES);
 AsyncWebServer server(80);
+
+// --- Global Scroll Speed Settings ---
+const int GENERAL_SCROLL_SPEED = 85;  // Default: Adjust this for Weather Description and Countdown Label (e.g., 50 for faster, 200 for slower)
+const int IP_SCROLL_SPEED = 115;      // Default: Adjust this for the IP Address display (slower for readability)
 
 // WiFi and configuration globals
 char ssid[32] = "";
@@ -55,6 +60,11 @@ int dimEndHour = 8;  // 8am default
 int dimEndMinute = 0;
 int dimBrightness = 2;  // Dimming level (0-15)
 
+//Countdown Globals - NEW
+bool countdownEnabled = false;
+time_t countdownTargetTimestamp = 0;  // Unix timestamp
+char countdownLabel[64] = "";         // Label for the countdown
+
 // State management
 bool weatherCycleStarted = false;
 WiFiClient client;
@@ -69,11 +79,11 @@ bool weatherFetched = false;
 bool weatherFetchInitiated = false;
 bool isAPMode = false;
 char tempSymbol = '[';
-bool shouldFetchWeatherNow = false;  // Flag to trigger immediate weather fetch
+bool shouldFetchWeatherNow = false;
 
 unsigned long lastSwitch = 0;
 unsigned long lastColonBlink = 0;
-int displayMode = 0;
+int displayMode = 0;  // 0: Clock, 1: Weather, 2: Weather Description, 3: Countdown
 int currentHumidity = -1;
 bool ntpSyncSuccessful = false;
 
@@ -90,13 +100,34 @@ const int ntpTimeout = 30000;  // 30 seconds
 const int maxNtpRetries = 30;
 int ntpRetryCount = 0;
 unsigned long lastNtpStatusPrintTime = 0;
-const unsigned long ntpStatusPrintInterval = 1000; // Print status every 5 seconds (adjust as needed)
+const unsigned long ntpStatusPrintInterval = 1000;  // Print status every 1 seconds (adjust as needed)
 
 // Non-blocking IP display globals
 bool showingIp = false;
 int ipDisplayCount = 0;
-const int ipDisplayMax = 2;
+const int ipDisplayMax = 2;  // As per working copy for how long IP shows
 String pendingIpToShow = "";
+
+// Countdown display state - NEW
+bool countdownScrolling = false;
+unsigned long countdownScrollEndTime = 0;
+unsigned long countdownStaticStartTime = 0;  // For last-day static display
+
+
+// --- NEW GLOBAL VARIABLES FOR IMMEDIATE COUNTDOWN FINISH ---
+bool countdownFinished = false;                       // Tracks if the countdown has permanently finished
+bool countdownShowFinishedMessage = false;            // Flag to indicate "TIMES UP" message is active
+unsigned long countdownFinishedMessageStartTime = 0;  // Timer for the 10-second message duration
+unsigned long lastFlashToggleTime = 0;                // For controlling the flashing speed
+bool currentInvertState = false;                      // Current state of display inversion for flashing
+static bool hourglassPlayed = false;
+
+// Weather Description Mode handling
+unsigned long descStartTime = 0;  // For static description
+bool descScrolling = false;
+const unsigned long descriptionDuration = 3000;    // 3s for short text
+static unsigned long descScrollEndTime = 0;        // for post-scroll delay (re-used for scroll timing)
+const unsigned long descriptionScrollPause = 300;  // 300ms pause after scroll
 
 // Scroll flipped
 textEffect_t getEffectiveScrollDirection(textEffect_t desiredDirection, bool isFlipped) {
@@ -117,9 +148,10 @@ textEffect_t getEffectiveScrollDirection(textEffect_t desiredDirection, bool isF
 void loadConfig() {
   Serial.println(F("[CONFIG] Loading configuration..."));
 
+  // Check if config.json exists, if not, create default
   if (!LittleFS.exists("/config.json")) {
     Serial.println(F("[CONFIG] config.json not found, creating with defaults..."));
-    DynamicJsonDocument doc(512);
+    DynamicJsonDocument doc(1024);
     doc[F("ssid")] = "";
     doc[F("password")] = "";
     doc[F("openWeatherApiKey")] = "";
@@ -139,8 +171,18 @@ void loadConfig() {
     doc[F("ntpServer2")] = ntpServer2;
     doc[F("dimmingEnabled")] = dimmingEnabled;
     doc[F("dimStartHour")] = dimStartHour;
+    doc[F("dimStartMinute")] = dimStartMinute;
     doc[F("dimEndHour")] = dimEndHour;
+    doc[F("dimEndMinute")] = dimEndMinute;
     doc[F("dimBrightness")] = dimBrightness;
+    doc[F("showWeatherDescription")] = showWeatherDescription;
+
+    // Add countdown defaults when creating a new config.json
+    JsonObject countdownObj = doc.createNestedObject("countdown");
+    countdownObj["enabled"] = false;
+    countdownObj["targetTimestamp"] = 0;
+    countdownObj["label"] = "";
+
     File f = LittleFS.open("/config.json", "w");
     if (f) {
       serializeJsonPretty(doc, f);
@@ -151,13 +193,14 @@ void loadConfig() {
     }
   }
 
+  Serial.println(F("[CONFIG] Attempting to open config.json for reading."));
   File configFile = LittleFS.open("/config.json", "r");
   if (!configFile) {
     Serial.println(F("[ERROR] Failed to open config.json for reading. Cannot load config."));
     return;
   }
 
-  DynamicJsonDocument doc(2048);
+  DynamicJsonDocument doc(1024);  // Size based on ArduinoJson Assistant + buffer
   DeserializationError error = deserializeJson(doc, configFile);
   configFile.close();
 
@@ -169,7 +212,7 @@ void loadConfig() {
 
   strlcpy(ssid, doc["ssid"] | "", sizeof(ssid));
   strlcpy(password, doc["password"] | "", sizeof(password));
-  strlcpy(openWeatherApiKey, doc["openWeatherApiKey"] | "", sizeof(openWeatherApiKey));
+  strlcpy(openWeatherApiKey, doc["openWeatherApiKey"] | "", sizeof(openWeatherApiKey));  // Corrected typo here
   strlcpy(openWeatherCity, doc["openWeatherCity"] | "", sizeof(openWeatherCity));
   strlcpy(openWeatherCountry, doc["openWeatherCountry"] | "", sizeof(openWeatherCountry));
   strlcpy(weatherUnits, doc["weatherUnits"] | "metric", sizeof(weatherUnits));
@@ -205,13 +248,42 @@ void loadConfig() {
     tempSymbol = ']';
   else
     tempSymbol = '[';
-  Serial.println(F("[CONFIG] Configuration loaded."));
 
   if (doc.containsKey("showWeatherDescription"))
     showWeatherDescription = doc["showWeatherDescription"];
   else
     showWeatherDescription = false;
+
+  // --- COUNTDOWN CONFIG LOADING ---
+  if (doc.containsKey("countdown")) {
+    JsonObject countdownObj = doc["countdown"];
+
+    countdownEnabled = countdownObj["enabled"] | false;
+    countdownTargetTimestamp = countdownObj["targetTimestamp"] | 0;
+
+    JsonVariant labelVariant = countdownObj["label"];
+    if (labelVariant.isNull() || !labelVariant.is<const char *>()) {
+      strcpy(countdownLabel, "");
+    } else {
+      const char *labelTemp = labelVariant.as<const char *>();
+      size_t labelLen = strlen(labelTemp);
+      if (labelLen >= sizeof(countdownLabel)) {
+        Serial.println(F("[CONFIG] label from JSON too long, truncating."));
+      }
+      strlcpy(countdownLabel, labelTemp, sizeof(countdownLabel));
+    }
+    countdownFinished = false;
+  } else {
+    countdownEnabled = false;
+    countdownTargetTimestamp = 0;
+    strcpy(countdownLabel, "");
+    Serial.println(F("[CONFIG] Countdown object not found, defaulting to disabled."));
+    countdownFinished = false;
+  }
+  Serial.println(F("[CONFIG] Configuration loaded."));
 }
+
+
 
 // -----------------------------------------------------------------------------
 // WiFi Setup
@@ -226,10 +298,9 @@ void connectWiFi() {
 
   if (!credentialsExist) {
     Serial.println(F("[WIFI] No saved credentials. Starting AP mode directly."));
-    // Always explicitly set the mode before starting AP
-    WiFi.mode(WIFI_AP); 
-    WiFi.disconnect(true); // Disconnect from any prior connection (STA, AP_STA)
-    delay(100); // Give it a moment to clear
+    WiFi.mode(WIFI_AP);
+    WiFi.disconnect(true);
+    delay(100);
 
     if (strlen(DEFAULT_AP_PASSWORD) < 8) {
       WiFi.softAP(AP_SSID);
@@ -247,26 +318,25 @@ void connectWiFi() {
     isAPMode = true;
 
     WiFiMode_t mode = WiFi.getMode();
-    Serial.printf("[WIFI] WiFi mode after setting AP: %s\n", // Updated message for clarity
-                  mode == WIFI_OFF    ? "OFF" :
-                  mode == WIFI_STA    ? "STA ONLY" :
-                  mode == WIFI_AP     ? "AP ONLY" :
-                  mode == WIFI_AP_STA ? "AP + STA (Error!)" :
-                                        "UNKNOWN");
+    Serial.printf("[WIFI] WiFi mode after setting AP: %s\n",
+                  mode == WIFI_OFF ? "OFF" : mode == WIFI_STA    ? "STA ONLY"
+                                           : mode == WIFI_AP     ? "AP ONLY"
+                                           : mode == WIFI_AP_STA ? "AP + STA (Error!)"
+                                                                 : "UNKNOWN");
 
     Serial.println(F("[WIFI] AP Mode Started"));
     return;
   }
 
   // If credentials exist, attempt STA connection
-  WiFi.mode(WIFI_STA); 
-  WiFi.disconnect(true); // Disconnect from any prior connection (AP, STA, or AP_STA)
-  delay(100); // Small delay for the mode change to take effect
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect(true);
+  delay(100);
 
-  WiFi.begin(ssid, password); // Attempts STA connection
+  WiFi.begin(ssid, password);
   unsigned long startAttemptTime = millis();
 
-  const unsigned long timeout = 30000; 
+  const unsigned long timeout = 30000;
   unsigned long animTimer = 0;
   int animFrame = 0;
   bool animating = true;
@@ -278,27 +348,27 @@ void connectWiFi() {
       isAPMode = false;
 
       WiFiMode_t mode = WiFi.getMode();
-      Serial.printf("[WIFI] WiFi mode after STA connection: %s\n", // Updated message
-                    mode == WIFI_OFF    ? "OFF" :
-                    mode == WIFI_STA    ? "STA ONLY" :
-                    mode == WIFI_AP     ? "AP ONLY" :
-                    mode == WIFI_AP_STA ? "AP + STA (Error!)" :
-                                          "UNKNOWN");
+      Serial.printf("[WIFI] WiFi mode after STA connection: %s\n",
+                    mode == WIFI_OFF ? "OFF" : mode == WIFI_STA    ? "STA ONLY"
+                                             : mode == WIFI_AP     ? "AP ONLY"
+                                             : mode == WIFI_AP_STA ? "AP + STA (Error!)"
+                                                                   : "UNKNOWN");
 
-      animating = false;
-
+      // --- IP Display initiation ---
       pendingIpToShow = WiFi.localIP().toString();
       showingIp = true;
-      ipDisplayCount = 0;
+      ipDisplayCount = 0;  // Reset count for IP display
       P.displayClear();
-      P.setCharSpacing(1);
+      P.setCharSpacing(1);  // Set spacing for IP scroll
       textEffect_t actualScrollDirection = getEffectiveScrollDirection(PA_SCROLL_LEFT, flipDisplay);
-      P.displayScroll(pendingIpToShow.c_str(), PA_CENTER, actualScrollDirection, 120);
+      P.displayScroll(pendingIpToShow.c_str(), PA_CENTER, actualScrollDirection, IP_SCROLL_SPEED);
+      // --- END IP Display initiation ---
+
+      animating = false;  // Exit the connection loop
       break;
     } else if (now - startAttemptTime >= timeout) {
       Serial.println(F("[WiFi] Failed. Starting AP mode..."));
-      // If STA connection failed, explicitly switch to ONLY AP mode before starting softAP
-      WiFi.mode(WIFI_AP); 
+      WiFi.mode(WIFI_AP);
       WiFi.softAP(AP_SSID, DEFAULT_AP_PASSWORD);
       Serial.print(F("[WiFi] AP IP address: "));
       Serial.println(WiFi.softAPIP());
@@ -306,12 +376,11 @@ void connectWiFi() {
       isAPMode = true;
 
       WiFiMode_t mode = WiFi.getMode();
-      Serial.printf("[WIFI] WiFi mode after STA failure and setting AP: %s\n", 
-                    mode == WIFI_OFF    ? "OFF" :
-                    mode == WIFI_STA    ? "STA ONLY" :
-                    mode == WIFI_AP     ? "AP ONLY" :
-                    mode == WIFI_AP_STA ? "AP + STA (Error!)" :
-                                          "UNKNOWN");
+      Serial.printf("[WIFI] WiFi mode after STA failure and setting AP: %s\n",
+                    mode == WIFI_OFF ? "OFF" : mode == WIFI_STA    ? "STA ONLY"
+                                             : mode == WIFI_AP     ? "AP ONLY"
+                                             : mode == WIFI_AP_STA ? "AP + STA (Error!)"
+                                                                   : "UNKNOWN");
 
       animating = false;
       Serial.println(F("[WIFI] AP Mode Started"));
@@ -401,6 +470,12 @@ void printConfigToSerial() {
   Serial.println(dimEndMinute);
   Serial.print(F("Dimming Brightness: "));
   Serial.println(dimBrightness);
+  Serial.print(F("Countdown Enabled: "));
+  Serial.println(countdownEnabled ? "Yes" : "No");
+  Serial.print(F("Countdown Target Timestamp: "));
+  Serial.println(countdownTargetTimestamp);
+  Serial.print(F("Countdown Label: "));
+  Serial.println(countdownLabel);
   Serial.println(F("========================================"));
   Serial.println();
 }
@@ -441,14 +516,13 @@ void setupWebServer() {
     request->send(200, "application/json", response);
   });
 
-  // Save, restore, status and settings handlers grouped for clarity
   server.on("/save", HTTP_POST, [](AsyncWebServerRequest *request) {
     Serial.println(F("[WEBSERVER] Request: /save"));
     DynamicJsonDocument doc(2048);
 
     File configFile = LittleFS.open("/config.json", "r");
     if (configFile) {
-      Serial.println(F("[WEBSERVER] Existing config.json found, loading..."));
+      Serial.println(F("[WEBSERVER] Existing config.json found, loading for update..."));
       DeserializationError err = deserializeJson(doc, configFile);
       configFile.close();
       if (err) {
@@ -456,15 +530,13 @@ void setupWebServer() {
         Serial.println(err.f_str());
       }
     } else {
-      Serial.println(F("[WEBSERVER] config.json not found, starting with empty doc."));
+      Serial.println(F("[WEBSERVER] config.json not found, starting with empty doc for save."));
     }
 
     for (int i = 0; i < request->params(); i++) {
       const AsyncWebParameter *p = request->getParam(i);
       String n = p->name();
       String v = p->value();
-
-      Serial.printf("[SAVE] Param: %s = %s\n", n.c_str(), v.c_str());
 
       if (n == "brightness") doc[n] = v.toInt();
       else if (n == "clockDuration") doc[n] = v.toInt();
@@ -479,12 +551,48 @@ void setupWebServer() {
       else if (n == "dimEndMinute") doc[n] = v.toInt();
       else if (n == "dimBrightness") doc[n] = v.toInt();
       else if (n == "showWeatherDescription") doc[n] = (v == "true" || v == "on" || v == "1");
-      else doc[n] = v;
+      else if (n == "dimmingEnabled") doc[n] = (v == "true" || v == "on" || v == "1");
+      else if (n == "weatherUnits") doc[n] = v;
+      else {
+        doc[n] = v;
+      }
     }
 
-    Serial.print(F("[SAVE] Document content before saving: "));
-    serializeJson(doc, Serial);
-    Serial.println();
+    bool newCountdownEnabled = (request->hasParam("countdownEnabled", true) && (request->getParam("countdownEnabled", true)->value() == "true" || request->getParam("countdownEnabled", true)->value() == "on" || request->getParam("countdownEnabled", true)->value() == "1"));
+    String countdownDateStr = request->hasParam("countdownDate", true) ? request->getParam("countdownDate", true)->value() : "";
+    String countdownTimeStr = request->hasParam("countdownTime", true) ? request->getParam("countdownTime", true)->value() : "";
+    String countdownLabelStr = request->hasParam("countdownLabel", true) ? request->getParam("countdownLabel", true)->value() : "";
+
+    time_t newTargetTimestamp = 0;
+    if (newCountdownEnabled && countdownDateStr.length() > 0 && countdownTimeStr.length() > 0) {
+      int year = countdownDateStr.substring(0, 4).toInt();
+      int month = countdownDateStr.substring(5, 7).toInt();
+      int day = countdownDateStr.substring(8, 10).toInt();
+      int hour = countdownTimeStr.substring(0, 2).toInt();
+      int minute = countdownTimeStr.substring(3, 5).toInt();
+
+      struct tm tm;
+      tm.tm_year = year - 1900;
+      tm.tm_mon = month - 1;
+      tm.tm_mday = day;
+      tm.tm_hour = hour;
+      tm.tm_min = minute;
+      tm.tm_sec = 0;
+      tm.tm_isdst = -1;
+
+      newTargetTimestamp = mktime(&tm);
+      if (newTargetTimestamp == (time_t)-1) {
+        Serial.println("[SAVE] Error converting countdown date/time to timestamp.");
+        newTargetTimestamp = 0;
+      } else {
+        Serial.printf("[SAVE] Converted countdown target: %s -> %lu\n", countdownDateStr.c_str(), newTargetTimestamp);
+      }
+    }
+
+    JsonObject countdownObj = doc.createNestedObject("countdown");
+    countdownObj["enabled"] = newCountdownEnabled;
+    countdownObj["targetTimestamp"] = newTargetTimestamp;
+    countdownObj["label"] = countdownLabelStr;
 
     FSInfo fs_info;
     LittleFS.info(fs_info);
@@ -510,7 +618,6 @@ void setupWebServer() {
     f.close();
     Serial.println(F("[SAVE] /config.json file closed."));
 
-    Serial.println(F("[SAVE] Attempting to open /config.json for verification."));
     File verify = LittleFS.open("/config.json", "r");
     if (!verify) {
       Serial.println(F("[SAVE] ERROR: Failed to open /config.json for reading during verification!"));
@@ -522,11 +629,9 @@ void setupWebServer() {
       return;
     }
 
-    Serial.println(F("[SAVE] Content of /config.json during verification read:"));
     while (verify.available()) {
-      Serial.write(verify.read());
+      verify.read();
     }
-    Serial.println();
     verify.seek(0);
 
     DynamicJsonDocument test(2048);
@@ -618,7 +723,6 @@ void setupWebServer() {
     request->send(200, "application/json", json);
   });
 
-  // Settings endpoints (brightness, flip, etc.)
   server.on("/set_brightness", HTTP_POST, [](AsyncWebServerRequest *request) {
     if (!request->hasParam("value", true)) {
       request->send(400, "application/json", "{\"error\":\"Missing value\"}");
@@ -698,20 +802,15 @@ void setupWebServer() {
       showDesc = (v == "1" || v == "true" || v == "on");
     }
 
-    // Check if the state is actually changing from true to false
     if (showWeatherDescription == true && showDesc == false) {
       Serial.println(F("[WEBSERVER] showWeatherDescription toggled OFF. Checking display mode..."));
-      // If we are currently in displayMode 2 (Weather Description)
       if (displayMode == 2) {
         Serial.println(F("[WEBSERVER] Currently in Weather Description mode. Forcing mode advance/cleanup."));
-        // Force an immediate mode advance.
-        // The advanceDisplayMode() function, as modified above, will handle the cleanup (P.displayClear() etc.)
-        // and transition to the next appropriate mode (likely clock).
         advanceDisplayMode();
       }
     }
 
-    showWeatherDescription = showDesc;  // Update the global flag AFTER the check/action
+    showWeatherDescription = showDesc;
     Serial.printf("[WEBSERVER] Set Show Weather Description to %d\n", showWeatherDescription);
     request->send(200, "application/json", "{\"ok\":true}");
   });
@@ -721,10 +820,10 @@ void setupWebServer() {
       String v = request->getParam("value", true)->value();
       if (v == "1" || v == "true" || v == "on") {
         strcpy(weatherUnits, "imperial");
-        tempSymbol = ']';  // Fahrenheit symbol
+        tempSymbol = ']';
       } else {
         strcpy(weatherUnits, "metric");
-        tempSymbol = '[';  // Celsius symbol
+        tempSymbol = '[';
       }
       Serial.printf("[WEBSERVER] Set weatherUnits to %s\n", weatherUnits);
       shouldFetchWeatherNow = true;
@@ -733,6 +832,34 @@ void setupWebServer() {
       request->send(400, "application/json", "{\"error\":\"Missing value parameter\"}");
     }
   });
+
+  server.on("/set_countdown_enabled", HTTP_POST, [](AsyncWebServerRequest *request) {
+    bool enableCountdownNow = false;
+    if (request->hasParam("value", true)) {
+      String v = request->getParam("value", true)->value();
+      enableCountdownNow = (v == "1" || v == "true" || v == "on");
+    }
+
+    if (countdownEnabled == enableCountdownNow) {
+      Serial.println(F("[WEBSERVER] Countdown enable state unchanged, ignoring."));
+      request->send(200, "application/json", "{\"ok\":true}");
+      return;
+    }
+
+    if (countdownEnabled == true && enableCountdownNow == false) {
+      Serial.println(F("[WEBSERVER] Countdown toggled OFF. Checking display mode..."));
+      if (displayMode == 3) {
+        Serial.println(F("[WEBSERVER] Currently in Countdown mode. Forcing mode advance/cleanup."));
+        advanceDisplayMode();
+      }
+    }
+
+    countdownEnabled = enableCountdownNow;
+    Serial.printf("[WEBSERVER] Set Countdown Enabled to %d\n", countdownEnabled);
+    request->send(200, "application/json", "{\"ok\":true}");
+  });
+
+
 
   server.begin();
   Serial.println(F("[WEBSERVER] Web server started"));
@@ -744,9 +871,8 @@ void handleCaptivePortal(AsyncWebServerRequest *request) {
   request->redirect(String("http://") + WiFi.softAPIP().toString() + "/");
 }
 
-// -----------------------------------------------------------------------------
-// Weather Fetching and API settings
-// -----------------------------------------------------------------------------
+
+
 String normalizeWeatherDescription(String str) {
   str.replace("å", "a");
   str.replace("ä", "a");
@@ -839,14 +965,12 @@ String normalizeWeatherDescription(String str) {
   str.replace("ż", "z");
 
   str.toLowerCase();
-  // Filter out anything that's not a–z or space
   String result = "";
   for (unsigned int i = 0; i < str.length(); i++) {
     char c = str.charAt(i);
     if ((c >= 'a' && c <= 'z') || c == ' ') {
       result += c;
     }
-    // else: ignore punctuation, emoji, symbols
   }
   return result;
 }
@@ -866,6 +990,11 @@ bool isFiveDigitZip(const char *str) {
   return true;
 }
 
+
+
+// -----------------------------------------------------------------------------
+// Weather Fetching and API settings
+// -----------------------------------------------------------------------------
 String buildWeatherURL() {
   String base = "http://api.openweathermap.org/data/2.5/weather?";
 
@@ -885,15 +1014,17 @@ String buildWeatherURL() {
   base += "&appid=" + String(openWeatherApiKey);
   base += "&units=" + String(weatherUnits);
 
-  String langForAPI = String(language);  // Start with the global language
+  String langForAPI = String(language);
 
   if (langForAPI == "eo" || langForAPI == "sw" || langForAPI == "ja") {
-    langForAPI = "en";  // Override to "en" for the API
+    langForAPI = "en";
   }
   base += "&lang=" + langForAPI;
 
   return base;
 }
+
+
 
 void fetchWeather() {
   Serial.println(F("[WEATHER] Fetching weather data..."));
@@ -911,124 +1042,85 @@ void fetchWeather() {
   }
   if (!(strlen(openWeatherCity) > 0 && strlen(openWeatherCountry) > 0)) {
     Serial.println(F("[WEATHER] Skipped: City or Country is empty."));
+    weatherAvailable = false;
     return;
   }
 
   Serial.println(F("[WEATHER] Connecting to OpenWeatherMap..."));
-  const char *host = "api.openweathermap.org";
   String url = buildWeatherURL();
   Serial.println(F("[WEATHER] URL: ") + url);
 
-  IPAddress ip;
-  if (!WiFi.hostByName(host, ip)) {
-    Serial.println(F("[WEATHER] DNS lookup failed!"));
-    weatherAvailable = false;
-    return;
-  }
+  HTTPClient http;    // Create an HTTPClient object
+  WiFiClient client;  // Create a WiFiClient object
 
-  if (!client.connect(host, 80)) {
-    Serial.println(F("[WEATHER] Connection failed"));
-    weatherAvailable = false;
-    return;
-  }
+  http.begin(client, url);  // Pass the WiFiClient object and the URL
 
-  Serial.println(F("[WEATHER] Connected, sending request..."));
-  String request = String("GET ") + url + " HTTP/1.1\r\n" + F("Host: ") + host + F("\r\n") + F("Connection: close\r\n\r\n");
+  http.setTimeout(10000);  // Sets both connection and stream timeout to 10 seconds
 
-  if (!client.print(request)) {
-    Serial.println(F("[WEATHER] Failed to send request!"));
-    client.stop();
-    weatherAvailable = false;
-    return;
-  }
+  Serial.println(F("[WEATHER] Sending GET request..."));
+  int httpCode = http.GET();  // Send the GET request
 
-  unsigned long weatherStart = millis();
-  const unsigned long weatherTimeout = 10000;
+  if (httpCode == HTTP_CODE_OK) {  // Check if HTTP response code is 200 (OK)
+    Serial.println(F("[WEATHER] HTTP 200 OK. Reading payload..."));
 
-  bool isBody = false;
-  String payload = "";
-  String line = "";
+    String payload = http.getString();
+    Serial.println(F("[WEATHER] Response received."));
+    Serial.println(F("[WEATHER] Payload: ") + payload);
 
-  while ((client.connected() || client.available()) && millis() - weatherStart < weatherTimeout && WiFi.status() == WL_CONNECTED) {
-    line = client.readStringUntil('\n');
-    if (line.length() == 0) continue;
+    DynamicJsonDocument doc(1536);  // Adjust size as needed, use ArduinoJson Assistant
+    DeserializationError error = deserializeJson(doc, payload);
 
-    if (line.startsWith(F("HTTP/1.1"))) {
-      int statusCode = line.substring(9, 12).toInt();
-      if (statusCode != 200) {
-        Serial.print(F("[WEATHER] HTTP error: "));
-        Serial.println(statusCode);
-        client.stop();
-        weatherAvailable = false;
-        return;
+    if (error) {
+      Serial.print(F("[WEATHER] JSON parse error: "));
+      Serial.println(error.f_str());
+      weatherAvailable = false;
+      return;
+    }
+
+    if (doc.containsKey(F("main")) && doc[F("main")].containsKey(F("temp"))) {
+      float temp = doc[F("main")][F("temp")];
+      currentTemp = String((int)round(temp)) + "º";
+      Serial.printf("[WEATHER] Temp: %s\n", currentTemp.c_str());
+      weatherAvailable = true;
+    } else {
+      Serial.println(F("[WEATHER] Temperature not found in JSON payload"));
+      weatherAvailable = false;
+      return;
+    }
+
+    if (doc.containsKey(F("main")) && doc[F("main")].containsKey(F("humidity"))) {
+      currentHumidity = doc[F("main")][F("humidity")];
+      Serial.printf("[WEATHER] Humidity: %d%%\n", currentHumidity);
+    } else {
+      currentHumidity = -1;
+    }
+
+    if (doc.containsKey(F("weather")) && doc[F("weather")].is<JsonArray>()) {
+      JsonObject weatherObj = doc[F("weather")][0];
+      if (weatherObj.containsKey(F("main"))) {
+        mainDesc = weatherObj[F("main")].as<String>();
       }
-    }
-
-    if (!isBody && line == F("\r")) {
-      isBody = true;
-      while (client.available()) {
-        payload += (char)client.read();
+      if (weatherObj.containsKey(F("description"))) {
+        detailedDesc = weatherObj[F("description")].as<String>();
       }
-      break;
+    } else {
+      Serial.println(F("[WEATHER] Weather description not found in JSON payload"));
     }
-    yield();
-  }
-  client.stop();
 
-  if (millis() - weatherStart >= weatherTimeout) {
-    Serial.println(F("[WEATHER] ERROR: Weather fetch timed out!"));
-    weatherAvailable = false;
-    return;
-  }
+    weatherDescription = normalizeWeatherDescription(detailedDesc);
+    Serial.printf("[WEATHER] Description used: %s\n", weatherDescription.c_str());
+    weatherFetched = true;
 
-  Serial.println(F("[WEATHER] Response received."));
-  Serial.println(F("[WEATHER] Payload: ") + payload);
-
-  DynamicJsonDocument doc(2048);
-  DeserializationError error = deserializeJson(doc, payload);
-  if (error) {
-    Serial.print(F("[WEATHER] JSON parse error: "));
-    Serial.println(error.f_str());
-    weatherAvailable = false;
-    return;
-  }
-
-  if (doc.containsKey(F("main")) && doc[F("main")].containsKey(F("temp"))) {
-    float temp = doc[F("main")][F("temp")];
-    currentTemp = String((int)round(temp)) + "º";
-    Serial.printf("[WEATHER] Temp: %s\n", currentTemp.c_str());
-    weatherAvailable = true;
   } else {
-    Serial.println(F("[WEATHER] Temperature not found in JSON payload"));
+    Serial.printf("[WEATHER] HTTP GET failed, error code: %d, reason: %s\n", httpCode, http.errorToString(httpCode).c_str());
     weatherAvailable = false;
-    return;
+    weatherFetched = false;
   }
 
-  if (doc.containsKey(F("main")) && doc[F("main")].containsKey(F("humidity"))) {
-    currentHumidity = doc[F("main")][F("humidity")];
-    Serial.printf("[WEATHER] Humidity: %d%%\n", currentHumidity);
-  } else {
-    currentHumidity = -1;
-  }
-
-  if (doc.containsKey(F("weather")) && doc[F("weather")].is<JsonArray>()) {
-    JsonObject weatherObj = doc[F("weather")][0];
-    if (weatherObj.containsKey(F("main"))) {
-      mainDesc = weatherObj[F("main")].as<String>();
-    }
-    if (weatherObj.containsKey(F("description"))) {
-      detailedDesc = weatherObj[F("description")].as<String>();
-    }
-  } else {
-    Serial.println(F("[WEATHER] Weather description not found in JSON payload"));
-  }
-
-  weatherDescription = normalizeWeatherDescription(detailedDesc);
-
-  Serial.printf("[WEATHER] Description used: %s\n", weatherDescription.c_str());
-
-  weatherFetched = true;
+  http.end();
 }
+
+
 
 // -----------------------------------------------------------------------------
 // Main setup() and loop()
@@ -1038,13 +1130,8 @@ DisplayMode key:
   0: Clock
   1: Weather
   2: Weather Description
+  3: Countdown (NEW)
 */
-// --- Weather Description Mode handling ---
-unsigned long descStartTime = 0;
-bool descScrolling = false;
-const unsigned long descriptionDuration = 3000;    // 3s for short text
-static unsigned long descScrollEndTime = 0;        // for post-scroll delay
-const unsigned long descriptionScrollPause = 300;  // 300ms pause after scroll
 
 void setup() {
   Serial.begin(115200);
@@ -1056,28 +1143,30 @@ void setup() {
     Serial.println(F("[ERROR] LittleFS mount failed in setup! Halting."));
     while (true) {
       delay(1000);
+      yield();
     }
   }
   Serial.println(F("[SETUP] LittleFS file system mounted successfully."));
 
-  P.begin();
+  P.begin();  // Initialize Parola library
+
   P.setCharSpacing(0);
   P.setFont(mFactory);
-  loadConfig();
+  loadConfig();  // This function now has internal yields and prints
+
   P.setIntensity(brightness);
   P.setZoneEffect(0, flipDisplay, PA_FLIP_UD);
   P.setZoneEffect(0, flipDisplay, PA_FLIP_LR);
+
   Serial.println(F("[SETUP] Parola (LED Matrix) initialized"));
+
   connectWiFi();
 
-
-  if (isAPMode) { // 'isAPMode' is set correctly within connectWiFi()
+  if (isAPMode) {
     Serial.println(F("[SETUP] WiFi connection failed. Device is in AP Mode."));
   } else if (WiFi.status() == WL_CONNECTED) {
     Serial.println(F("[SETUP] WiFi connected successfully to local network."));
   } else {
-    // This 'else' block should ideally not be hit if connectWiFi() always
-    // either connects or goes to AP mode. It's a safeguard.
     Serial.println(F("[SETUP] WiFi state is uncertain after connection attempt."));
   }
 
@@ -1092,37 +1181,135 @@ void setup() {
   lastColonBlink = millis();
 }
 
+
+
 void advanceDisplayMode() {
   int oldMode = displayMode;  // Store the old mode
 
-  if (displayMode == 0) {
-    displayMode = 1;  // clock -> weather
-  } else if (displayMode == 1 && showWeatherDescription && weatherAvailable && weatherDescription.length() > 0) {
-    displayMode = 2;  // weather -> description
-  } else {
-    displayMode = 0;  // description (or weather if no desc) -> clock
+  // Determine the next display mode based on the current mode and conditions
+  if (displayMode == 0) {  // Current mode is Clock
+    if (weatherAvailable && (strlen(openWeatherApiKey) == 32) && (strlen(openWeatherCity) > 0) && (strlen(openWeatherCountry) > 0)) {
+      displayMode = 1;  // Clock -> Weather (if weather is available and configured)
+      Serial.println(F("[DISPLAY] Switching to display mode: WEATHER (from Clock)"));
+    } else if (countdownEnabled && !countdownFinished && ntpSyncSuccessful) {
+      displayMode = 3;  // Clock -> Countdown (if weather is NOT available/configured, but countdown is)
+      Serial.println(F("[DISPLAY] Switching to display mode: COUNTDOWN (from Clock, weather skipped)"));
+    } else {
+      displayMode = 0;  // Clock -> Clock (if neither weather nor countdown is available)
+      Serial.println(F("[DISPLAY] Staying in CLOCK (from Clock, no weather/countdown available)"));
+    }
+  } else if (displayMode == 1) {  // Current mode is Weather
+    if (showWeatherDescription && weatherAvailable && weatherDescription.length() > 0) {
+      displayMode = 2;  // Weather -> Description (if description is enabled and available)
+      Serial.println(F("[DISPLAY] Switching to display mode: DESCRIPTION (from Weather)"));
+    } else if (countdownEnabled && !countdownFinished && ntpSyncSuccessful) {
+      displayMode = 3;  // Weather -> Countdown (if description is NOT enabled/available, but countdown is)
+      Serial.println(F("[DISPLAY] Switching to display mode: COUNTDOWN (from Weather)"));
+    } else {
+      displayMode = 0;  // Weather -> Clock (if neither description nor countdown is available)
+      Serial.println(F("[DISPLAY] Switching to display mode: CLOCK (from Weather)"));
+    }
+  } else if (displayMode == 2) {  // Current mode is Weather Description
+    if (countdownEnabled && !countdownFinished && ntpSyncSuccessful) {
+      displayMode = 3;  // Description -> Countdown (if countdown is valid)
+      Serial.println(F("[DISPLAY] Switching to display mode: COUNTDOWN (from Description)"));
+    } else {
+      displayMode = 0;  // Description -> Clock (if countdown is NOT valid)
+      Serial.println(F("[DISPLAY] Switching to display mode: CLOCK (from Description)"));
+    }
+  } else if (displayMode == 3) {  // Current mode is Countdown
+    displayMode = 0;              // Countdown -> Clock (always return to clock after countdown)
+    Serial.println(F("[DISPLAY] Switching to display mode: CLOCK (from Countdown)"));
   }
-  lastSwitch = millis();
 
-  // If we were in description mode (oldMode == 2) and are now switching out of it
-  // This handles both natural time-based transitions and forced transitions
-  if (oldMode == 2 && displayMode != 2) {
-    P.displayClear();       // Stop any ongoing scroll and clear the display
-    descScrolling = false;  // Reset scrolling flag
-    descStartTime = 0;      // Reset static text timer
-    descScrollEndTime = 0;  // Reset scroll end timer
-    Serial.println(F("[DISPLAY] Cleared display after exiting Description Mode (via advanceDisplayMode)."));
+  // --- Common cleanup/reset after mode switch ---
+  lastSwitch = millis();  // Reset the timer for the new mode's duration
+
+  // Reset variables specifically for the mode being ENTERED
+  if (displayMode == 3) {          // Entering Countdown mode
+    countdownScrolling = false;    // Ensure scrolling starts from beginning
+    countdownStaticStartTime = 0;  // Reset static display timer
   }
 
-  // Serial print for debugging
-  const char *modeName = displayMode == 0 ? "CLOCK" : displayMode == 1 ? "WEATHER" : "DESCRIPTION";
-  Serial.printf("[LOOP] Switching to display mode: %s\n", modeName);
+  // Clear display and reset flags when EXITING specific modes
+  if (oldMode == 2 && displayMode != 2) {  // Exiting Description Mode
+    P.displayClear();
+    descScrolling = false;
+    descStartTime = 0;
+    descScrollEndTime = 0;
+    Serial.println(F("[DISPLAY] Cleared display after exiting Description Mode."));
+  }
+  if (oldMode == 3 && displayMode != 3) {  // Exiting Countdown Mode
+    P.displayClear();
+    countdownScrolling = false;
+    countdownStaticStartTime = 0;
+    countdownScrollEndTime = 0;
+    Serial.println(F("[DISPLAY] Cleared display after exiting Countdown Mode."));
+  }
 }
+
+//config save after countdown finishes
+bool saveCountdownConfig(bool enabled, time_t targetTimestamp, const String &label) {
+  DynamicJsonDocument doc(2048);
+
+  File configFile = LittleFS.open("/config.json", "r");
+  if (configFile) {
+    DeserializationError err = deserializeJson(doc, configFile);
+    configFile.close();
+    if (err) {
+      Serial.print(F("[saveCountdownConfig] Error parsing config.json: "));
+      Serial.println(err.f_str());
+      return false;
+    }
+  }
+
+  JsonObject countdownObj = doc["countdown"].is<JsonObject>() ? doc["countdown"].as<JsonObject>() : doc.createNestedObject("countdown");
+  countdownObj["enabled"] = enabled;
+  countdownObj["targetTimestamp"] = targetTimestamp;
+  countdownObj["label"] = label;
+  doc.remove("countdownEnabled");
+  doc.remove("countdownDate");
+  doc.remove("countdownTime");
+  doc.remove("countdownLabel");
+
+  if (LittleFS.exists("/config.json")) {
+    LittleFS.rename("/config.json", "/config.bak");
+  }
+
+  File f = LittleFS.open("/config.json", "w");
+  if (!f) {
+    Serial.println(F("[saveCountdownConfig] ERROR: Cannot write to /config.json"));
+    return false;
+  }
+
+  size_t bytesWritten = serializeJson(doc, f);
+  f.close();
+
+  Serial.printf("[saveCountdownConfig] Config updated. %u bytes written.\n", bytesWritten);
+  return true;
+}
+
 
 void loop() {
   if (isAPMode) {
     dnsServer.processNextRequest();
   }
+
+  static bool colonVisible = true;
+  const unsigned long colonBlinkInterval = 800;
+  if (millis() - lastColonBlink > colonBlinkInterval) {
+    colonVisible = !colonVisible;
+    lastColonBlink = millis();
+  }
+
+  static unsigned long ntpAnimTimer = 0;
+  static int ntpAnimFrame = 0;
+  static bool tzSetAfterSync = false;
+
+  static unsigned long lastFetch = 0;
+  const unsigned long fetchInterval = 300000;  // 5 minutes
+
+
 
   // AP Mode animation
   static unsigned long apAnimTimer = 0;
@@ -1143,24 +1330,25 @@ void loop() {
     return;
   }
 
+
   // Dimming
-  time_t now = time(nullptr);
+  time_t now_time = time(nullptr);
   struct tm timeinfo;
-  localtime_r(&now, &timeinfo);
+  localtime_r(&now_time, &timeinfo);
   int curHour = timeinfo.tm_hour;
   int curMinute = timeinfo.tm_min;
   int curTotal = curHour * 60 + curMinute;
   int startTotal = dimStartHour * 60 + dimStartMinute;
   int endTotal = dimEndHour * 60 + dimEndMinute;
-  bool isDimming = false;
+  bool isDimmingActive = false;
 
   if (dimmingEnabled) {
     if (startTotal < endTotal) {
-      isDimming = (curTotal >= startTotal && curTotal < endTotal);
-    } else {
-      isDimming = (curTotal >= startTotal || curTotal < endTotal);
+      isDimmingActive = (curTotal >= startTotal && curTotal < endTotal);
+    } else {  // Overnight dimming
+      isDimmingActive = (curTotal >= startTotal || curTotal < endTotal);
     }
-    if (isDimming) {
+    if (isDimmingActive) {
       P.setIntensity(dimBrightness);
     } else {
       P.setIntensity(brightness);
@@ -1169,7 +1357,20 @@ void loop() {
     P.setIntensity(brightness);
   }
 
-  // Show IP after WiFi connect
+  // --- IMMEDIATE COUNTDOWN FINISH TRIGGER ---
+  if (countdownEnabled && !countdownFinished && ntpSyncSuccessful && countdownTargetTimestamp > 0 && now_time >= countdownTargetTimestamp) {
+    countdownFinished = true;
+    displayMode = 3;  // Let main loop handle animation + TIMES UP
+    countdownShowFinishedMessage = true;
+    hourglassPlayed = false;
+    countdownFinishedMessageStartTime = millis();
+
+    Serial.println("[SYSTEM] Countdown target reached! Switching to Mode 3 to display finish sequence.");
+    yield();
+  }
+
+
+  // --- IP Display ---
   if (showingIp) {
     if (P.displayAnimate()) {
       ipDisplayCount++;
@@ -1179,35 +1380,24 @@ void loop() {
       } else {
         showingIp = false;
         P.displayClear();
-        delay(500);
+        delay(500);  // Blocking delay as in working copy
         displayMode = 0;
         lastSwitch = millis();
       }
     }
     yield();
-    return;
+    return;  // Exit loop early if showing IP
   }
 
-  static bool colonVisible = true;
-  const unsigned long colonBlinkInterval = 800;
-  if (millis() - lastColonBlink > colonBlinkInterval) {
-    colonVisible = !colonVisible;
-    lastColonBlink = millis();
-  }
 
-  static unsigned long ntpAnimTimer = 0;
-  static int ntpAnimFrame = 0;
-  static bool tzSetAfterSync = false;
 
-  static unsigned long lastFetch = 0;
-  const unsigned long fetchInterval = 300000;  // 5 minutes
-
+  // --- NTP State Machine ---
   switch (ntpState) {
     case NTP_IDLE: break;
-case NTP_SYNCING:
+    case NTP_SYNCING:
       {
         time_t now = time(nullptr);
-        if (now > 1000) { // NTP sync successful
+        if (now > 1000) {  // NTP sync successful
           Serial.println(F("[TIME] NTP sync successful."));
           ntpSyncSuccessful = true;
           ntpState = NTP_SUCCESS;
@@ -1221,11 +1411,10 @@ case NTP_SYNCING:
             Serial.printf("[TIME] NTP sync in progress (attempt %d of %d)...\n", ntpRetryCount + 1, maxNtpRetries);
             lastNtpStatusPrintTime = millis();
           }
-
           // Still increment ntpRetryCount based on your original timing for the timeout logic
           // (even if you don't print a dot for every increment)
           if (millis() - ntpStartTime > ((unsigned long)(ntpRetryCount + 1) * 1000UL)) {
-              ntpRetryCount++;
+            ntpRetryCount++;
           }
         }
         break;
@@ -1245,34 +1434,37 @@ case NTP_SYNCING:
       ntpAnimFrame = 0;
       break;
   }
+
+
+
   // Only advance mode by timer for clock/weather, not description!
   unsigned long displayDuration = (displayMode == 0) ? clockDuration : weatherDuration;
   if ((displayMode == 0 || displayMode == 1) && millis() - lastSwitch > displayDuration) {
     advanceDisplayMode();
   }
+
+
+
   // --- MODIFIED WEATHER FETCHING LOGIC ---
   if (WiFi.status() == WL_CONNECTED) {
-    // Check if an immediate fetch is requested OR if the regular interval has passed
     if (!weatherFetchInitiated || shouldFetchWeatherNow || (millis() - lastFetch > fetchInterval)) {
       if (shouldFetchWeatherNow) {
         Serial.println(F("[LOOP] Immediate weather fetch requested by web server."));
-        shouldFetchWeatherNow = false;  // Reset the flag after handling
+        shouldFetchWeatherNow = false;
       } else if (!weatherFetchInitiated) {
         Serial.println(F("[LOOP] Initial weather fetch."));
       } else {
         Serial.println(F("[LOOP] Regular interval weather fetch."));
       }
       weatherFetchInitiated = true;
-      weatherFetched = false;  // Mark as not yet fetched
+      weatherFetched = false;
       fetchWeather();
       lastFetch = millis();
     }
   } else {
     weatherFetchInitiated = false;
-    // It's good practice to reset the flag if WiFi disconnects to avoid stale requests
     shouldFetchWeatherNow = false;
   }
-  // --- END MODIFIED WEATHER FETCHING LOGIC ---
 
   const char *const *daysOfTheWeek = getDaysOfWeek(language);
   const char *daySymbol = daysOfTheWeek[timeinfo.tm_wday];
@@ -1303,6 +1495,114 @@ case NTP_SYNCING:
     formattedTime = String(timeSpacedStr);
   }
 
+  unsigned long currentDisplayDuration = 0;
+  if (displayMode == 0) {
+    currentDisplayDuration = clockDuration;
+  } else if (displayMode == 1) {  // Weather
+    currentDisplayDuration = weatherDuration;
+  }
+
+  // Only advance mode by timer for clock/weather static (Mode 0 & 1).
+  // Other modes (2, 3) have their own internal timers/conditions for advancement.
+  if ((displayMode == 0 || displayMode == 1) && (millis() - lastSwitch > currentDisplayDuration)) {
+    advanceDisplayMode();
+  }
+
+
+
+  // --- CLOCK Display Mode ---
+  if (displayMode == 0) {
+    P.setCharSpacing(0);
+
+    if (ntpState == NTP_SYNCING) {
+      if (ntpSyncSuccessful || ntpRetryCount >= maxNtpRetries || millis() - ntpStartTime > ntpTimeout) {
+        // Avoid being stuck here if something went wrong in state management
+        ntpState = NTP_FAILED;
+      } else {
+        if (millis() - ntpAnimTimer > 750) {
+          ntpAnimTimer = millis();
+          switch (ntpAnimFrame % 3) {
+            case 0: P.print(F("S Y N C ®")); break;
+            case 1: P.print(F("S Y N C ¯")); break;
+            case 2: P.print(F("S Y N C °")); break;
+          }
+          ntpAnimFrame++;
+        }
+      }
+    } else if (!ntpSyncSuccessful) {
+      P.setTextAlignment(PA_CENTER);
+
+      static unsigned long errorAltTimer = 0;
+      static bool showNtpError = true;
+
+      // Toggle every 2 seconds if both are unavailable
+      if (!ntpSyncSuccessful && !weatherAvailable) {
+        if (millis() - errorAltTimer > 2000) {
+          errorAltTimer = millis();
+          showNtpError = !showNtpError;
+        }
+
+        if (showNtpError) {
+          P.print(F("?/"));  // NTP error glyph
+        } else {
+          P.print(F("?*"));  // Weather error glyph
+        }
+
+      } else if (!ntpSyncSuccessful) {
+        P.print(F("?/"));  // NTP only
+      } else if (!weatherAvailable) {
+        P.print(F("?*"));  // Weather only
+      }
+
+    } else {
+      // NTP and weather are OK — show time
+      String timeString = formattedTime;
+      if (!colonVisible) timeString.replace(":", " ");
+      P.print(timeString);
+    }
+
+    yield();
+    return;
+  }
+
+
+
+  // --- WEATHER Display Mode ---
+  static bool weatherWasAvailable = false;
+  if (displayMode == 1) {
+    P.setCharSpacing(1);
+    if (weatherAvailable) {
+      String weatherDisplay;
+      if (showHumidity && currentHumidity != -1) {
+        int cappedHumidity = (currentHumidity > 99) ? 99 : currentHumidity;
+        weatherDisplay = currentTemp + " " + String(cappedHumidity) + "%";
+      } else {
+        weatherDisplay = currentTemp + tempSymbol;
+      }
+      P.print(weatherDisplay.c_str());
+      weatherWasAvailable = true;
+    } else {
+      if (weatherWasAvailable) {
+        Serial.println(F("[DISPLAY] Weather not available, showing clock..."));
+        weatherWasAvailable = false;
+      }
+      if (ntpSyncSuccessful) {
+        String timeString = formattedTime;
+        if (!colonVisible) timeString.replace(":", " ");
+        P.setCharSpacing(0);
+        P.print(timeString);
+      } else {
+        P.setCharSpacing(0);
+        P.setTextAlignment(PA_CENTER);
+        P.print(F("?*"));
+      }
+    }
+    yield();
+    return;
+  }
+
+
+
   // --- WEATHER DESCRIPTION Display Mode ---
   if (displayMode == 2 && showWeatherDescription && weatherAvailable && weatherDescription.length() > 0) {
     String desc = weatherDescription;
@@ -1312,7 +1612,7 @@ case NTP_SYNCING:
       if (!descScrolling) {
         P.displayClear();
         textEffect_t actualScrollDirection = getEffectiveScrollDirection(PA_SCROLL_LEFT, flipDisplay);
-        P.displayScroll(desc.c_str(), PA_CENTER, actualScrollDirection, 100);
+        P.displayScroll(desc.c_str(), PA_CENTER, actualScrollDirection, GENERAL_SCROLL_SPEED);
         descScrolling = true;
         descScrollEndTime = 0;  // reset end time at start
       }
@@ -1347,64 +1647,262 @@ case NTP_SYNCING:
     }
   }
 
-  static bool weatherWasAvailable = false;
-  // --- CLOCK Display Mode ---
-  if (displayMode == 0) {
-    P.setCharSpacing(0);
-    if (ntpState == NTP_SYNCING) {
-      if (millis() - ntpAnimTimer > 750) {
-        ntpAnimTimer = millis();
-        switch (ntpAnimFrame % 3) {
-          case 0: P.print(F("S Y N C ®")); break;
-          case 1: P.print(F("S Y N C ¯")); break;
-          case 2: P.print(F("S Y N C °")); break;
-        }
-        ntpAnimFrame++;
-      }
-    } else if (!ntpSyncSuccessful) {
-      P.setTextAlignment(PA_CENTER);
-      P.print(F("?/"));
-    } else {
-      String timeString = formattedTime;
-      if (!colonVisible) timeString.replace(":", " ");
-      P.print(timeString);
-    }
-    yield();
-    return;
-  }
 
-  // --- WEATHER Display Mode ---
-  if (displayMode == 1) {
-    P.setCharSpacing(1);
-    if (weatherAvailable) {
-      String weatherDisplay;
-      if (showHumidity && currentHumidity != -1) {
-        int cappedHumidity = (currentHumidity > 99) ? 99 : currentHumidity;
-        weatherDisplay = currentTemp + " " + String(cappedHumidity) + "%";
-      } else {
-        weatherDisplay = currentTemp + tempSymbol;
+  // --- Countdown Display Mode ---
+  if (displayMode == 3 && countdownEnabled && ntpSyncSuccessful) {
+    static int countdownSegment = 0;
+    static unsigned long segmentStartTime = 0;
+    const unsigned long SEGMENT_DISPLAY_DURATION = 1500;  // 1.5 seconds for each static segment
+
+    long timeRemaining = countdownTargetTimestamp - now_time;
+
+    // --- Countdown Finished Logic ---
+    // This 'if' block now handles the entire "finished" sequence (hourglass + flashing).
+    if (timeRemaining <= 0 || countdownShowFinishedMessage) {
+
+      // NEW: Only show "TIMES UP" if countdown target timestamp is valid and expired
+      time_t now = time(nullptr);
+      if (countdownTargetTimestamp == 0 || countdownTargetTimestamp > now) {
+        // Target invalid or in the future, don't show "TIMES UP" yet, advance display instead
+        countdownShowFinishedMessage = false;
+        countdownFinished = false;
+        countdownFinishedMessageStartTime = 0;
+        hourglassPlayed = false;  // Reset if we decide not to show it
+        Serial.println("[COUNTDOWN-FINISH] Countdown target invalid or not reached yet, skipping 'TIMES UP'. Advancing display.");
+        advanceDisplayMode();
+        yield();
+        return;
       }
-      P.print(weatherDisplay.c_str());
-      weatherWasAvailable = true;
-    } else {
-      if (weatherWasAvailable) {
-        Serial.println(F("[DISPLAY] Weather not available, showing clock..."));
-        weatherWasAvailable = false;
-      }
-      if (ntpSyncSuccessful) {
-        String timeString = formattedTime;
-        if (!colonVisible) timeString.replace(":", " ");
-        P.setCharSpacing(0);
-        P.print(timeString);
-      } else {
-        P.setCharSpacing(0);
+
+      // Define these static variables here if they are not global (or already defined in your loop())
+      static const char *flashFrames[] = { "{|", "}~" };
+      static unsigned long lastFlashingSwitch = 0;
+      static int flashingMessageFrame = 0;
+
+      // --- Initial Combined Sequence: Play Hourglass THEN start Flashing ---
+      // This 'if' runs ONLY ONCE when the "finished" sequence begins.
+      if (!hourglassPlayed) {                          // <-- This is the single entry point for the combined sequence
+        countdownFinished = true;                      // Mark as finished overall
+        countdownShowFinishedMessage = true;           // Confirm we are in the finished sequence
+        countdownFinishedMessageStartTime = millis();  // Start the 15-second timer for the flashing duration
+
+        // 1. Play Hourglass Animation (Blocking)
+        const char *hourglassFrames[] = { "¡", "¢", "£", "¤" };
+        for (int repeat = 0; repeat < 3; repeat++) {
+          for (int i = 0; i < 4; i++) {
+            P.setTextAlignment(PA_CENTER);
+            P.setCharSpacing(0);
+            P.print(hourglassFrames[i]);
+            delay(350);  // This is blocking! (Total ~4.2 seconds for hourglass)
+          }
+        }
+        Serial.println("[COUNTDOWN-FINISH] Played hourglass animation.");
+        P.displayClear();  // Clear display after hourglass animation
+
+        // 2. Initialize Flashing "TIMES UP" for its very first frame
+        flashingMessageFrame = 0;
+        lastFlashingSwitch = millis();  // Set initial time for first flash frame
         P.setTextAlignment(PA_CENTER);
-        P.print(F("?*"));
+        P.setCharSpacing(0);
+        P.print(flashFrames[flashingMessageFrame]);             // Display the first frame immediately
+        flashingMessageFrame = (flashingMessageFrame + 1) % 2;  // Prepare for the next frame
+
+        hourglassPlayed = true;  // <-- Mark that this initial combined sequence has completed!
+        countdownSegment = 0;    // Reset segment counter after finished sequence initiation
+        segmentStartTime = 0;    // Reset segment timer after finished sequence initiation
       }
-    }
+
+      // --- Continue Flashing "TIMES UP" for its duration (after initial combined sequence) ---
+      // This part runs in subsequent loop iterations after the hourglass has played.
+      if (millis() - countdownFinishedMessageStartTime < 15000) {  // Flashing duration
+        if (millis() - lastFlashingSwitch >= 500) {                // Check for flashing interval
+          lastFlashingSwitch = millis();
+          P.displayClear();
+          P.setTextAlignment(PA_CENTER);
+          P.setCharSpacing(0);
+          P.print(flashFrames[flashingMessageFrame]);
+          flashingMessageFrame = (flashingMessageFrame + 1) % 2;
+        }
+        P.displayAnimate();  // Ensure display updates
+        yield();
+        return;  // Stay in this mode until the 15 seconds are over
+      } else {
+        // 15 seconds are over, clean up and advance
+        Serial.println("[COUNTDOWN-FINISH] Flashing duration over. Advancing to Clock.");
+        countdownShowFinishedMessage = false;
+        countdownFinishedMessageStartTime = 0;
+        hourglassPlayed = false;  // <-- RESET this flag for the next countdown cycle!
+
+        // Final cleanup (persisted)
+        countdownEnabled = false;
+        countdownTargetTimestamp = 0;
+        countdownLabel[0] = '\0';
+        saveCountdownConfig(false, 0, "");
+
+        P.setInvert(false);
+        advanceDisplayMode();
+        yield();
+        return;  // Exit loop after processing
+      }
+    }  // END of 'if (timeRemaining <= 0 || countdownShowFinishedMessage)'
+
+    // --- Normal Countdown Segments (Only if not in finished state) ---
+    // This 'else' block will only run if `timeRemaining > 0` and `!countdownShowFinishedMessage`
+    else {
+      long days = timeRemaining / (24 * 3600);
+      long hours = (timeRemaining % (24 * 3600)) / 3600;
+      long minutes = (timeRemaining % 3600) / 60;
+      long seconds = timeRemaining % 60;
+
+      String currentSegmentText = "";
+
+      if (segmentStartTime == 0 || (millis() - segmentStartTime > SEGMENT_DISPLAY_DURATION)) {
+        segmentStartTime = millis();
+        P.displayClear();
+
+        switch (countdownSegment) {
+          case 0:  // Days
+            if (days > 0) {
+              currentSegmentText = String(days) + " " + (days == 1 ? "DAY" : "DAYS");
+              Serial.printf("[COUNTDOWN-STATIC] Displaying segment %d: %s\n", countdownSegment, currentSegmentText.c_str());
+              countdownSegment++;
+            } else {
+              // Skip days if zero
+              countdownSegment++;
+              segmentStartTime = 0;
+            }
+            break;
+
+          case 1:
+            {  // Hours
+              char buf[10];
+              sprintf(buf, "%02ld HRS", hours);  // pad hours with 0
+              currentSegmentText = String(buf);
+              Serial.printf("[COUNTDOWN-STATIC] Displaying segment %d: %s\n", countdownSegment, currentSegmentText.c_str());
+              countdownSegment++;
+              break;
+            }
+
+          case 2:
+            {  // Minutes
+              char buf[10];
+              sprintf(buf, "%02ld MINS", minutes);  // pad minutes with 0
+              currentSegmentText = String(buf);
+              Serial.printf("[COUNTDOWN-STATIC] Displaying segment %d: %s\n", countdownSegment, currentSegmentText.c_str());
+              countdownSegment++;
+              break;
+            }
+
+          case 3:
+            {
+
+              // --- Otherwise, run countdown segments like before ---
+
+              time_t segmentStartTime = time(nullptr);      // Get fixed start time
+              unsigned long segmentStartMillis = millis();  // Capture start millis for delta
+
+              long nowRemaining = countdownTargetTimestamp - segmentStartTime;
+              long currentSecond = nowRemaining % 60;
+
+              char secondsBuf[10];
+              sprintf(secondsBuf, "%02ld %s", currentSecond, currentSecond == 1 ? "SEC" : "SECS");
+              String secondsText = String(secondsBuf);
+              Serial.printf("[COUNTDOWN-STATIC] Displaying segment 3: %s\n", secondsText.c_str());
+
+              P.displayClear();
+              P.setTextAlignment(PA_CENTER);
+              P.setCharSpacing(1);
+              P.print(secondsText.c_str());
+
+              delay(SEGMENT_DISPLAY_DURATION - 400);  // Show the first seconds value slightly shorter
+
+              unsigned long elapsed = millis() - segmentStartMillis;
+              long adjustedSecond = (countdownTargetTimestamp - segmentStartTime - (elapsed / 1000)) % 60;
+
+              sprintf(secondsBuf, "%02ld %s", adjustedSecond, adjustedSecond == 1 ? "SEC" : "SECS");
+              secondsText = String(secondsBuf);
+
+              P.displayClear();
+              P.setTextAlignment(PA_CENTER);
+              P.setCharSpacing(1);
+              P.print(secondsText.c_str());
+
+              delay(400);  // Short burst to show the updated second clearly
+
+              String label;
+              if (strlen(countdownLabel) > 0) {
+                label = String(countdownLabel);
+                label.trim();
+                if (!label.startsWith("TO:") && !label.startsWith("to:")) {
+                  label = "TO: " + label;
+                }
+                label.replace('.', ',');
+              } else {
+                static const char *fallbackLabels[] = {
+                  "TO: PARTY TIME!",
+                  "TO: SHOWTIME!",
+                  "TO: CLOCKOUT!",
+                  "TO: BLASTOFF!",
+                  "TO: GO TIME!",
+                  "TO: LIFTOFF!",
+                  "TO: THE BIG REVEAL!",
+                  "TO: ZERO HOUR!",
+                  "TO: THE FINAL COUNT!",
+                  "TO: MISSION COMPLETE"
+                };
+                int randomIndex = random(0, 10);
+                label = fallbackLabels[randomIndex];
+              }
+
+              P.setTextAlignment(PA_LEFT);
+              P.setCharSpacing(1);
+              textEffect_t actualScrollDirection = getEffectiveScrollDirection(PA_SCROLL_LEFT, flipDisplay);
+              P.displayScroll(label.c_str(), PA_LEFT, actualScrollDirection, GENERAL_SCROLL_SPEED);
+
+              // --- THIS IS THE BLOCKING LOOP THAT REMAINS PER YOUR REQUEST ---
+              while (!P.displayAnimate()) {
+                yield();
+              }
+
+              countdownSegment++;
+              segmentStartTime = millis();
+              break;
+            }
+
+          case 4:  // Exit countdown
+            Serial.println("[COUNTDOWN-STATIC] All countdown segments and label displayed. Advancing to Clock.");
+            countdownSegment = 0;
+            segmentStartTime = 0;
+
+            P.setTextAlignment(PA_CENTER);
+            P.setCharSpacing(1);
+            advanceDisplayMode();
+            yield();
+            return;
+
+          default:
+            Serial.println("[COUNTDOWN-ERROR] Invalid countdownSegment, resetting.");
+            countdownSegment = 0;
+            segmentStartTime = 0;
+            break;
+        }
+
+        if (currentSegmentText.length() > 0) {
+          P.setTextAlignment(PA_CENTER);
+          P.setCharSpacing(1);
+          P.print(currentSegmentText.c_str());
+        }
+      }
+
+      P.displayAnimate();  // This handles regular segment display updates
+    }                      // End of 'else' (Normal Countdown Segments)
+
+    // Keep alignment reset just in case
+    P.setTextAlignment(PA_CENTER);
+    P.setCharSpacing(1);
     yield();
     return;
-  }
+  }  // End of if (displayMode == 3 && ...)
 
   yield();
 }

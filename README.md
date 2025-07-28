@@ -44,6 +44,7 @@ Get the 3D printable case!
   - **Flip display** (180 degrees)
   - Adjustable display **brightness**
   - Dimming Hours **Scheduling**
+  - Dramatic **Countdown** function
     
 ---
 
@@ -114,7 +115,8 @@ Click the **cog icon** next to “Advanced Settings” in the web UI to reveal e
 - **Weather description** toggle (display weather description in the selected language* for 3 seconds or scrolls once if description is too long)
 - **Flip Display**: Invert the display vertically/horizontally
 - **Brightness**: 0 (dim) to 15 (bright)
-- **Dimming Feature**: Start time, end time and desired brightness selection 
+- **Dimming Feature**: Start time, end time and desired brightness selection
+- **Dramatic Countdown** function, set a countdown to your favorit/next event! 
 
 *Non-English characters converted to their closest English alphabet.  
 Tip: Don't forget to press the save button to keep your settings

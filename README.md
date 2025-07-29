@@ -11,14 +11,14 @@ Setup and configuration are fully managed via a built-in web interface.
 ![clock - weather](assets/demo.gif) 
 
 
-<img src="assets/image01.png" alt="3D Printable Case" width="320" max-width="320" />
+## 📦 3D Printable Case
 
-Get the 3D printable case!
+Want to give your ESPTimeCast a home? You can 3D print a custom case for it!
 
+<img src="assets/image01.png" alt="3D Printable Case" width="320" />
 
 [![Download on Printables](https://img.shields.io/badge/Printables-Download-orange?logo=prusa)](https://www.printables.com/model/1344276-esptimecast-wi-fi-clock-weather-display)
 [![Available on Cults3D](https://img.shields.io/badge/Cults3D-Download-blue?logo=cults3d)](https://cults3d.com/en/3d-model/gadget/wifi-connected-led-matrix-clock-and-weather-station-esp8266-and-max7219)
-
 
 ---
 
@@ -52,17 +52,18 @@ Get the 3D printable case!
 
 
 
- Note: although the pins are labeled differently in the V4, the positions are the same as the V3.x
+ Note: although the pins are labeled differently in the V4 and the S2, the positions are the same as the V3.x
 
-**Wemos D1 Mini (ESP8266) → MAX7219**
+**Wemos D1 Mini (ESP8266) → MAX7219**  
+**Wemos S2 Mini (ESP32) → MAX7219**
 
-| Wemos D1 Mini (v3.x) | Wemos D1 Mini (v4.0) | MAX7219 |
-|:-------------:|:-------:|:-------:|
-| GND           | GND     | GND     |
-| D6            | 12      | CLK     |
-| D7            | 13      | CS      |
-| D8            | 15     | DIN     |
-| 3V3           | 3V3     | VCC     |
+| Wemos D1 Mini (v3.x) | Wemos D1 Mini (v4.0) | Wemos S2 Mini | MAX7219 |
+|:------:|:------:|:------:|:------|
+|  GND  |  GND  |  GND  |   GND  |
+|  D6   |  12  |  9  |   CLK  |
+|  D7   |  13  |  11  |   CS   |
+|  D8   |  15  |  12  |   DIN  |
+|  3V3  |  3V3  |  3V3  |   VCC  | 
 
 
 <img src="assets/wiring.png" alt="Wiring" width="800" />
@@ -138,40 +139,69 @@ Tip: Don't forget to press the save button to keep your settings
 
 ## 🚀 Getting Started
 
-1. **Clone this repo**
-2. **Flash the ESP8266** using Arduino IDE or PlatformIO (Flash size "4MB FS:2MB OTA:~1019KB")
-4. **Upload `/data` folder** with LittleFS uploader (see below)
-
-### Board Setup
-
-- Install ESP8266 board package:  
-  `http://arduino.esp8266.com/stable/package_esp8266com_index.json`
-- Select **Wemos D1 Mini** (or your ESP8266 variant) in Tools → Board
-- Select Flash Size "4MB FS:2MB OTA:~1019KB" under Tools
-
-### Dependencies
-
-Install these libraries (Library Manager / PlatformIO):
-
-- `ArduinoJson` by Benoit Blanchon
-- `MD_Parola / MD_MAX72xx` all dependencies by majicDesigns
-- `ESPAsyncTCP` by ESP32Async
-- `ESPAsyncWebServer` by ESP32Async
-
-### LittleFS Upload
-
-Install the [LittleFS Uploader](https://randomnerdtutorials.com/arduino-ide-2-install-esp8266-littlefs/).
-
-**To upload `/data`:**
-
-1. Open Command Palette:
-   - Windows: `Ctrl+Shift+P`
-   - macOS: `Cmd+Shift+P`
-2. Run: `Upload LittleFS to ESP8266`
-
-**Important:** Serial Monitor **must be closed** before uploading!
+This guide will walk you through setting up your environment and uploading the **ESPTimeCast** project to your **ESP8266** or **ESP32** board. Please follow the instructions carefully for your specific board type.
 
 ---
+
+### ⚙️ ESP8266 Setup
+
+Follow these steps to prepare your Arduino IDE for ESP8266 development:
+
+1.  **Install ESP8266 Board Package:**
+    * Open `File > Preferences` in Arduino IDE.
+    * Add `http://arduino.esp8266.com/stable/package_esp8266com_index.json` to "Additional Boards Manager URLs."
+    * Go to `Tools > Board > Boards Manager...`. Search for `esp8266` by `ESP8266 Community` and click "Install".
+2.  **Select Your Board:**
+    * Go to `Tools > Board` and select your specific board, e.g., **Wemos D1 Mini** (or your ESP8266 variant).
+3.  **Configure Flash Size:**
+    * Under `Tools`, select `Flash Size "4MB FS:2MB OTA:~1019KB"`. This ensures enough space for the sketch and LittleFS data.
+4.  **Install Libraries:**
+    * Go to `Sketch > Include Library > Manage Libraries...` and install the following:
+        * `ArduinoJson` by Benoit Blanchon
+        * `MD_Parola` by majicDesigns (this will typically also install its dependency: `MD_MAX72xx`)
+        * `ESPAsyncTCP` by ESP32Async
+        * `ESPAsyncWebServer` by ESP32Async
+
+---
+
+### ⚙️ ESP32 Setup
+
+Follow these steps to prepare your Arduino IDE for ESP32 development:
+
+1.  **Install ESP32 Board Package:**
+    * Go to `Tools > Board > Boards Manager...`. Search for `esp32` by `Espressif Systems` and click "Install".
+2.  **Select Your Board:**
+    * Go to `Tools > Board` and select your specific board, e.g., **LOLIN S2 Mini** (or your ESP32 variant).
+3.  **Configure Partition Scheme:**
+    * Under `Tools`, select `Partition Scheme "Default 4MB with spiffs"`. This ensures enough space for the sketch and LittleFS data.
+4.  **Install Libraries:**
+    * Go to `Sketch > Include Library > Manage Libraries...` and install the following:
+        * `ArduinoJson` by Benoit Blanchon
+        * `MD_Parola` by majicDesigns (this will typically also install its dependency: `MD_MAX72xx`)
+        * `AsyncTCP` by ESP32Async
+        * `ESPAsyncWebServer` by ESP32Async
+
+---
+
+### ⬆️ Uploading the Code and Data
+
+Once your Arduino IDE is set up for your board (as described above):
+
+1.  **Open the Project Folder:**
+    * For ESP8266: Navigate to and open the `ESPTimceCast_ESP8266` project folder. Inside, you'll find the main sketch file, typically named `ESPTimceCast_ESP8266.ino`. Open this `.ino` file in the Arduino IDE.
+    * For ESP32: Navigate to and open the `ESPTimceCast_ESP32` project folder. Inside, you'll find the main sketch file, typically named `ESPTimceCast_ESP32.ino`. Open this `.ino` file in the Arduino IDE.
+2. **Upload the Sketch:**
+    * With the main sketch file open, click the "Upload" button (the right arrow icon) in the Arduino IDE toolbar. This will compile the entire project and upload it to your board.
+3.  **Upload `/data` folder (LittleFS):**
+    * This project uses LittleFS for storing web interface files and other assets. You'll need the LittleFS Uploader plugin.
+    * [**Install the LittleFS Uploader Plugin**](https://randomnerdtutorials.com/arduino-ide-2-install-esp8266-littlefs/) 
+    * **Before uploading, ensure the Serial Monitor is closed.**
+    * Open the Command Palette (`Ctrl+Shift+P` on Windows, `Cmd+Shift+P` on macOS).
+    * Search for and run: `Upload Little FS to Pico/ESP8266/ESP32` (the exact command name might vary).
+    * **Important for ESP32:** If the upload fails, you might need to manually put your ESP32 into "Download Mode." While holding down the **Boot button** (often labeled 'BOOT' or 'IO0' or 'IO9'), briefly press and release the **RST button**, then release the Boot button.
+
+---
+
 
 ## 📺 Display Behavior
 

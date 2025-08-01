@@ -49,6 +49,7 @@ bool flipDisplay = false;
 bool twelveHourToggle = false;
 bool showDayOfWeek = true;
 bool showHumidity = false;
+bool colonBlinkEnabled = true;
 char ntpServer1[64] = "pool.ntp.org";
 char ntpServer2[64] = "time.nist.gov";
 
@@ -167,6 +168,7 @@ void loadConfig() {
     doc[F("twelveHourToggle")] = twelveHourToggle;
     doc[F("showDayOfWeek")] = showDayOfWeek;
     doc[F("showHumidity")] = showHumidity;
+    doc[F("colonBlinkEnabled")] = colonBlinkEnabled; 
     doc[F("ntpServer1")] = ntpServer1;
     doc[F("ntpServer2")] = ntpServer2;
     doc[F("dimmingEnabled")] = dimmingEnabled;
@@ -231,6 +233,7 @@ void loadConfig() {
   twelveHourToggle = doc["twelveHourToggle"] | false;
   showDayOfWeek = doc["showDayOfWeek"] | true;
   showHumidity = doc["showHumidity"] | false;
+  colonBlinkEnabled = doc.containsKey("colonBlinkEnabled") ? doc["colonBlinkEnabled"].as<bool>() : true;
 
   String de = doc["dimmingEnabled"].as<String>();
   dimmingEnabled = (de == "true" || de == "on" || de == "1");
@@ -452,8 +455,10 @@ void printConfigToSerial() {
   Serial.println(showDayOfWeek ? "Yes" : "No");
   Serial.print(F("Show Weather Description: "));
   Serial.println(showWeatherDescription ? "Yes" : "No");
-  Serial.print(F("Show Humidity "));
+  Serial.print(F("Show Humidity: "));
   Serial.println(showHumidity ? "Yes" : "No");
+  Serial.print(F("Blinking colon: "));
+  Serial.println(colonBlinkEnabled ? "Yes" : "No");
   Serial.print(F("NTP Server 1: "));
   Serial.println(ntpServer1);
   Serial.print(F("NTP Server 2: "));
@@ -545,6 +550,7 @@ void setupWebServer() {
       else if (n == "twelveHourToggle") doc[n] = (v == "true" || v == "on" || v == "1");
       else if (n == "showDayOfWeek") doc[n] = (v == "true" || v == "on" || v == "1");
       else if (n == "showHumidity") doc[n] = (v == "true" || v == "on" || v == "1");
+      else if (n == "colonBlinkEnabled") doc[n] = (v == "true" || v == "on" || v == "1");
       else if (n == "dimStartHour") doc[n] = v.toInt();
       else if (n == "dimStartMinute") doc[n] = v.toInt();
       else if (n == "dimEndHour") doc[n] = v.toInt();
@@ -782,6 +788,17 @@ void setupWebServer() {
     Serial.printf("[WEBSERVER] Set showHumidity to %d\n", showHumidity);
     request->send(200, "application/json", "{\"ok\":true}");
   });
+
+  server.on("/set_colon_blink", HTTP_POST, [](AsyncWebServerRequest *request) {
+  bool enableBlink = false;
+  if (request->hasParam("value", true)) {
+    String v = request->getParam("value", true)->value();
+    enableBlink = (v == "1" || v == "true" || v == "on");
+  }
+  colonBlinkEnabled = enableBlink;
+  Serial.printf("[WEBSERVER] Set colonBlinkEnabled to %d\n", colonBlinkEnabled);
+  request->send(200, "application/json", "{\"ok\":true}");
+});
 
   server.on("/set_language", HTTP_POST, [](AsyncWebServerRequest *request) {
     if (!request->hasParam("value", true)) {
@@ -1555,10 +1572,12 @@ void loop() {
       }
 
     } else {
-      // NTP and weather are OK — show time
-      String timeString = formattedTime;
-      if (!colonVisible) timeString.replace(":", " ");
-      P.print(timeString);
+  // NTP and weather are OK — show time
+  String timeString = formattedTime;
+  if (colonBlinkEnabled && !colonVisible) {
+    timeString.replace(":", " ");
+  }
+  P.print(timeString);
     }
 
     yield();

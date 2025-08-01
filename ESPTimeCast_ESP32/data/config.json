@@ -15,6 +15,7 @@
   "twelveHourToggle": false,
   "showDayOfWeek": true,
   "showHumidity": false,
+  "colonBlinkEnabled": true,
   "language": "en",
   "dimmingEnabled": false,
   "dimStartHour": 18,

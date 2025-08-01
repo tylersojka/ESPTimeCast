@@ -487,6 +487,14 @@ textarea::placeholder {
         </label>
 
         <label style="display: flex; align-items: center; margin-top: 1.75rem; justify-content: space-between;">
+          <span style="margin-right: 0.5em;">Blinking Colon:</span>
+          <span class="toggle-switch">
+            <input type="checkbox" id="colonBlinkEnabled" name="colonBlinkEnabled" onchange="setColonBlink(this.checked)">
+            <span class="toggle-slider"></span>
+          </span>
+        </label>
+
+        <label style="display: flex; align-items: center; margin-top: 1.75rem; justify-content: space-between;">
           <span style="margin-right: 0.5em;">Display 12-hour Clock:</span>
           <span class="toggle-switch">
             <input type="checkbox" id="twelveHourToggle" name="twelveHourToggle" onchange="setTwelveHour(this.checked)">
@@ -647,6 +655,7 @@ window.onload = function () {
       document.getElementById('twelveHourToggle').checked = !!data.twelveHourToggle;
       document.getElementById('showDayOfWeek').checked = !!data.showDayOfWeek;
       document.getElementById('showHumidity').checked = !!data.showHumidity;
+      document.getElementById('colonBlinkEnabled').checked = !!data.colonBlinkEnabled;
       document.getElementById('showWeatherDescription').checked = !!data.showWeatherDescription;
       // Dimming controls
 const dimmingEnabledEl = document.getElementById('dimmingEnabled');
@@ -787,6 +796,7 @@ async function submitConfig(event) {
   formData.set('twelveHourToggle', document.getElementById('twelveHourToggle').checked ? 'on' : '');
   formData.set('showDayOfWeek', document.getElementById('showDayOfWeek').checked ? 'on' : '');
   formData.set('showHumidity', document.getElementById('showHumidity').checked ? 'on' : '');
+  formData.set('colonBlinkEnabled', document.getElementById('colonBlinkEnabled').checked ? 'on' : '');
 
   //dimming
   formData.set('dimmingEnabled', document.getElementById('dimmingEnabled').checked ? 'true' : 'false');
@@ -1081,6 +1091,14 @@ function setTwelveHour(val) {
 
 function setShowDayOfWeek(val) {
   fetch('/set_dayofweek', {
+    method: 'POST',
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "value=" + (val ? 1 : 0)
+  });
+}
+
+function setColonBlink(val) {
+  fetch('/set_colon_blink', {
     method: 'POST',
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: "value=" + (val ? 1 : 0)

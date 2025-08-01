@@ -37,6 +37,7 @@ Want to give your ESPTimeCast a home? You can 3D print a custom case for it!
 - **Advanced Settings** panel with:
   - Custom **Primary/Secondary NTP server** input
   - Display **Day of the Week** toggle (default is on)
+  - Display **Blinking Colon** toggle (default is on)
   - **24/12h clock mode** toggle (24-hour default)
   - **Imperial Units (°F)** toggle (metric °C defaults)
   - Show **Humidity** toggle (display Humidity besides Temperature)
@@ -110,6 +111,7 @@ Click the **cog icon** next to “Advanced Settings” in the web UI to reveal e
 - **Primary NTP Server**: Override the default NTP server (e.g. `pool.ntp.org`)
 - **Secondary NTP Server**: Fallback NTP server (e.g. `time.nist.gov`)
 - **Day of the Week**: Display Day of the Week in the desired language
+- **Blinking Colon** toggle (default is on)
 - **24/12h Clock**: Switch between 24-hour and 12-hour time formats (24-hour default)
 - **Imperial Units (°F)** toggle (metric °C defaults)
 - **Humidity**: Display Humidity besides Temperature

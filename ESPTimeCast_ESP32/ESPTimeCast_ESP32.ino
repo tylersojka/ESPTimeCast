@@ -891,6 +891,39 @@ void handleCaptivePortal(AsyncWebServerRequest *request) {
 
 
 String normalizeWeatherDescription(String str) {
+  // Serbian Cyrillic → Latin
+  str.replace("а", "a");
+  str.replace("б", "b");
+  str.replace("в", "v");
+  str.replace("г", "g");
+  str.replace("д", "d");
+  str.replace("ђ", "dj");
+  str.replace("е", "e");
+  str.replace("ж", "z");
+  str.replace("з", "z");
+  str.replace("и", "i");
+  str.replace("ј", "j");
+  str.replace("к", "k");
+  str.replace("л", "l");
+  str.replace("љ", "lj");
+  str.replace("м", "m");
+  str.replace("н", "n");
+  str.replace("њ", "nj");
+  str.replace("о", "o");
+  str.replace("п", "p");
+  str.replace("р", "r");
+  str.replace("с", "s");
+  str.replace("т", "t");
+  str.replace("ћ", "c");
+  str.replace("у", "u");
+  str.replace("ф", "f");
+  str.replace("х", "h");
+  str.replace("ц", "c");
+  str.replace("ч", "c");
+  str.replace("џ", "dz");
+  str.replace("ш", "s");
+
+  // Latin diacritics → ASCII
   str.replace("å", "a");
   str.replace("ä", "a");
   str.replace("à", "a");
@@ -981,16 +1014,18 @@ String normalizeWeatherDescription(String str) {
   str.replace("ź", "z");
   str.replace("ż", "z");
 
-  str.toLowerCase();
+  str.toUpperCase();
+
   String result = "";
   for (unsigned int i = 0; i < str.length(); i++) {
     char c = str.charAt(i);
-    if ((c >= 'a' && c <= 'z') || c == ' ') {
+    if ((c >= 'A' && c <= 'Z') || c == ' ') {
       result += c;
     }
   }
   return result;
 }
+
 
 bool isNumber(const char *str) {
   for (int i = 0; str[i]; i++) {

@@ -30,6 +30,7 @@ const DaysOfWeekMapping days_mappings[] = {
     { "ro", { "d&u&m", "l&u&n", "m&a&r", "m&i&e", "j&o&i", "v&i&n", "s&a&m" } },
     { "sk", { "n&e&d", "p&o&n", "u&t&o", "s&t&r", "s&t&v", "p&i&a", "s&o&b" } },
     { "sl", { "n&e&d", "p&o&n", "t&o&r", "s&r&e", "c&e&t", "p&e&t", "s&o&b" } },
+    { "sr", { "n&e&d", "p&o&n", "u&t&o", "s&r&e", "c&e&t", "p&e&t", "s&u&b" } },
     { "sv", { "s&o&n", "m&a&n", "t&i&s", "o&n&s", "t&o&r", "f&r&e", "l&o&r" } },
     { "sw", { "j&p&l", "j&u&m", "j&t&t", "j&t&n", "a&l&k", "i&j&m", "j&m&s" } },
     { "tr", { "p&a&z", "p&a&z", "s&a&l", "c&a&r", "p&e&r", "c&u&m", "c&u&m" } }

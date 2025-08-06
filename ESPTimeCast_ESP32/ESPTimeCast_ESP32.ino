@@ -168,7 +168,7 @@ void loadConfig() {
     doc[F("twelveHourToggle")] = twelveHourToggle;
     doc[F("showDayOfWeek")] = showDayOfWeek;
     doc[F("showHumidity")] = showHumidity;
-    doc[F("colonBlinkEnabled")] = colonBlinkEnabled; 
+    doc[F("colonBlinkEnabled")] = colonBlinkEnabled;
     doc[F("ntpServer1")] = ntpServer1;
     doc[F("ntpServer2")] = ntpServer2;
     doc[F("dimmingEnabled")] = dimmingEnabled;
@@ -601,7 +601,7 @@ void setupWebServer() {
     countdownObj["label"] = countdownLabelStr;
 
     size_t total = LittleFS.totalBytes();
-    size_t used  = LittleFS.usedBytes();
+    size_t used = LittleFS.usedBytes();
     Serial.printf("[SAVE] LittleFS total bytes: %llu, used bytes: %llu\n", LittleFS.totalBytes(), LittleFS.usedBytes());
 
     if (LittleFS.exists("/config.json")) {
@@ -790,25 +790,31 @@ void setupWebServer() {
   });
 
   server.on("/set_colon_blink", HTTP_POST, [](AsyncWebServerRequest *request) {
-  bool enableBlink = false;
-  if (request->hasParam("value", true)) {
-    String v = request->getParam("value", true)->value();
-    enableBlink = (v == "1" || v == "true" || v == "on");
-  }
-  colonBlinkEnabled = enableBlink;
-  Serial.printf("[WEBSERVER] Set colonBlinkEnabled to %d\n", colonBlinkEnabled);
-  request->send(200, "application/json", "{\"ok\":true}");
-});
+    bool enableBlink = false;
+    if (request->hasParam("value", true)) {
+      String v = request->getParam("value", true)->value();
+      enableBlink = (v == "1" || v == "true" || v == "on");
+    }
+    colonBlinkEnabled = enableBlink;
+    Serial.printf("[WEBSERVER] Set colonBlinkEnabled to %d\n", colonBlinkEnabled);
+    request->send(200, "application/json", "{\"ok\":true}");
+  });
 
   server.on("/set_language", HTTP_POST, [](AsyncWebServerRequest *request) {
     if (!request->hasParam("value", true)) {
       request->send(400, "application/json", "{\"error\":\"Missing value\"}");
       return;
     }
+
     String lang = request->getParam("value", true)->value();
-    strlcpy(language, lang.c_str(), sizeof(language));
-    Serial.printf("[WEBSERVER] Set language to %s\n", language);
+    lang.trim();         // Remove whitespace/newlines
+    lang.toLowerCase();  // Normalize to lowercase
+
+    strlcpy(language, lang.c_str(), sizeof(language));              // Safe copy to char[]
+    Serial.printf("[WEBSERVER] Set language to '%s'\n", language);  // Use quotes for debug
+
     shouldFetchWeatherNow = true;
+
     request->send(200, "application/json", "{\"ok\":true}");
   });
 
@@ -1100,7 +1106,7 @@ void fetchWeather() {
 
   Serial.println(F("[WEATHER] Connecting to OpenWeatherMap..."));
   String url = buildWeatherURL();
-  Serial.print(F("[WEATHER] URL: ")); // Use F() with Serial.print
+  Serial.print(F("[WEATHER] URL: "));  // Use F() with Serial.print
   Serial.println(url);
 
   HTTPClient http;    // Create an HTTPClient object
@@ -1118,7 +1124,7 @@ void fetchWeather() {
 
     String payload = http.getString();
     Serial.println(F("[WEATHER] Response received."));
-    Serial.print(F("[WEATHER] Payload: ")); // Use F() with Serial.print
+    Serial.print(F("[WEATHER] Payload: "));  // Use F() with Serial.print
     Serial.println(payload);
 
     DynamicJsonDocument doc(1536);  // Adjust size as needed, use ArduinoJson Assistant
@@ -1609,12 +1615,12 @@ void loop() {
       }
 
     } else {
-  // NTP and weather are OK — show time
-  String timeString = formattedTime;
-  if (colonBlinkEnabled && !colonVisible) {
-    timeString.replace(":", " ");
-  }
-  P.print(timeString);
+      // NTP and weather are OK — show time
+      String timeString = formattedTime;
+      if (colonBlinkEnabled && !colonVisible) {
+        timeString.replace(":", " ");
+      }
+      P.print(timeString);
     }
 
     yield();

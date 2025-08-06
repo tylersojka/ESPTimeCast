@@ -168,7 +168,7 @@ void loadConfig() {
     doc[F("twelveHourToggle")] = twelveHourToggle;
     doc[F("showDayOfWeek")] = showDayOfWeek;
     doc[F("showHumidity")] = showHumidity;
-    doc[F("colonBlinkEnabled")] = colonBlinkEnabled; 
+    doc[F("colonBlinkEnabled")] = colonBlinkEnabled;
     doc[F("ntpServer1")] = ntpServer1;
     doc[F("ntpServer2")] = ntpServer2;
     doc[F("dimmingEnabled")] = dimmingEnabled;
@@ -790,27 +790,34 @@ void setupWebServer() {
   });
 
   server.on("/set_colon_blink", HTTP_POST, [](AsyncWebServerRequest *request) {
-  bool enableBlink = false;
-  if (request->hasParam("value", true)) {
-    String v = request->getParam("value", true)->value();
-    enableBlink = (v == "1" || v == "true" || v == "on");
-  }
-  colonBlinkEnabled = enableBlink;
-  Serial.printf("[WEBSERVER] Set colonBlinkEnabled to %d\n", colonBlinkEnabled);
-  request->send(200, "application/json", "{\"ok\":true}");
-});
+    bool enableBlink = false;
+    if (request->hasParam("value", true)) {
+      String v = request->getParam("value", true)->value();
+      enableBlink = (v == "1" || v == "true" || v == "on");
+    }
+    colonBlinkEnabled = enableBlink;
+    Serial.printf("[WEBSERVER] Set colonBlinkEnabled to %d\n", colonBlinkEnabled);
+    request->send(200, "application/json", "{\"ok\":true}");
+  });
 
   server.on("/set_language", HTTP_POST, [](AsyncWebServerRequest *request) {
     if (!request->hasParam("value", true)) {
       request->send(400, "application/json", "{\"error\":\"Missing value\"}");
       return;
     }
+
     String lang = request->getParam("value", true)->value();
-    strlcpy(language, lang.c_str(), sizeof(language));
-    Serial.printf("[WEBSERVER] Set language to %s\n", language);
+    lang.trim();         // Remove whitespace/newlines
+    lang.toLowerCase();  // Normalize to lowercase
+
+    strlcpy(language, lang.c_str(), sizeof(language));              // Safe copy to char[]
+    Serial.printf("[WEBSERVER] Set language to '%s'\n", language);  // Use quotes for debug
+
     shouldFetchWeatherNow = true;
+
     request->send(200, "application/json", "{\"ok\":true}");
   });
+
 
   server.on("/set_weatherdesc", HTTP_POST, [](AsyncWebServerRequest *request) {
     bool showDesc = false;
@@ -1605,12 +1612,12 @@ void loop() {
       }
 
     } else {
-  // NTP and weather are OK — show time
-  String timeString = formattedTime;
-  if (colonBlinkEnabled && !colonVisible) {
-    timeString.replace(":", " ");
-  }
-  P.print(timeString);
+      // NTP and weather are OK — show time
+      String timeString = formattedTime;
+      if (colonBlinkEnabled && !colonVisible) {
+        timeString.replace(":", " ");
+      }
+      P.print(timeString);
     }
 
     yield();
@@ -1658,7 +1665,7 @@ void loop() {
   // --- WEATHER DESCRIPTION Display Mode ---
   if (displayMode == 2 && showWeatherDescription && weatherAvailable && weatherDescription.length() > 0) {
     String desc = weatherDescription;
-   
+
     if (desc.length() > 8) {
       if (!descScrolling) {
         P.displayClear();

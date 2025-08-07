@@ -46,6 +46,7 @@ Want to give your ESPTimeCast a home? You can 3D print a custom case for it!
   - Adjustable display **brightness**
   - Dimming Hours **Scheduling**
   - Dramatic **Countdown** function
+  - Optional **glucose + trend** display (Nightscout-compatible, set via ntpserver2)
     
 ---
 
@@ -267,6 +268,7 @@ If you enjoy this project, please consider supporting my work:
 
 [![Donate via PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg?logo=paypal)](https://www.paypal.me/officialuphoto)
 [![GitHub Sponsors](https://img.shields.io/badge/GitHub-Sponsor-fafbfc?logo=github&logoColor=ea4aaa)](https://github.com/sponsors/mfactory-osaka) 
+
 
 
 

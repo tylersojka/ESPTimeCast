@@ -53,6 +53,8 @@ Want to give your ESPTimeCast a home? You can 3D print a custom case for it!
 
 
 
+**Power Supply Change** Switching from 3.3V to 5V for Display
+
  Note: although the pins are labeled differently in the V4 and the S2, the positions are the same as the V3.x
 
 **Wemos D1 Mini (ESP8266) → MAX7219**  
@@ -64,12 +66,32 @@ Want to give your ESPTimeCast a home? You can 3D print a custom case for it!
 |  D6   |  12  |  9  |   CLK  |
 |  D7   |  13  |  11  |   CS   |
 |  D8   |  15  |  12  |   DIN  |
-|  3V3  |  3V3  |  3V3  |   VCC  | 
-
+|  5V  |  5V  |  5V  |   VCC  | 
 
 <img src="assets/wiring.png" alt="Wiring" width="800" />
 
-Note: Thanks to @Wood578Guy for the Wiring diagram and the info on V4
+**Important hardware update:**  
+After observing overheating issues and unstable behavior when powering the MAX7219 matrix from the Mini D1’s 3.3V pin, we’re officially switching to powering the display via the 5V USB rail instead.  
+
+**What’s changing:**
+- Before: Display VCC was connected to 3.3V pin on the ESP board.
+- Now: Display VCC will be connected to the board’s 5V pin (which comes directly from USB power).
+  
+**Why this change is needed:**
+- The MAX7219 LED matrix is designed for 5V operation.  
+- The onboard 3.3V regulator (usually an AMS1117) on the Mini D1 is very limited in current output (~800mA max, often much less in practice).  
+- High-brightness matrix modules — especially green/yellow displays — can draw enough current to overload the regulator, causing:
+  - Overheating
+  - Voltage drop
+  - Complete regulator failure (some users reported only 2.4V output after damage)
+
+**Benefits of using 5V:**
+- Higher brightness and more stable matrix performance
+- Reduced heat load on the ESP8266 board
+- Avoid long-term damage to the onboard regulator
+- The MAX7219 works fine with 3.3V logic signals from the ESP (no need for level shifters)
+
+Note: Thanks to @Wood578Guy for the info on V4
 
 ---
 
@@ -245,6 +267,7 @@ If you enjoy this project, please consider supporting my work:
 
 [![Donate via PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg?logo=paypal)](https://www.paypal.me/officialuphoto)
 [![GitHub Sponsors](https://img.shields.io/badge/GitHub-Sponsor-fafbfc?logo=github&logoColor=ea4aaa)](https://github.com/sponsors/mfactory-osaka) 
+
 
 
 

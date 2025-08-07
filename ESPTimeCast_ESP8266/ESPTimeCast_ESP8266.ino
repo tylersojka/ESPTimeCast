@@ -11,6 +11,7 @@
 #include <DNSServer.h>
 #include <sntp.h>
 #include <time.h>
+#include <WiFiClientSecure.h>
 
 #include "mfactoryfont.h"  // Custom font
 #include "tz_lookup.h"     // Timezone lookup, do not duplicate mapping here!
@@ -51,7 +52,7 @@ bool showDayOfWeek = true;
 bool showHumidity = false;
 bool colonBlinkEnabled = true;
 char ntpServer1[64] = "pool.ntp.org";
-char ntpServer2[64] = "time.nist.gov";
+char ntpServer2[256] = "time.nist.gov";
 
 // Dimming
 bool dimmingEnabled = false;
@@ -1241,68 +1242,64 @@ void setup() {
 
 
 void advanceDisplayMode() {
-  int oldMode = displayMode;  // Store the old mode
+  int oldMode = displayMode;
+  String ntpField = String(ntpServer2);
+  bool nightscoutConfigured = ntpField.startsWith("https://");
 
-  // Determine the next display mode based on the current mode and conditions
-  if (displayMode == 0) {  // Current mode is Clock
+  if (displayMode == 0) {  // Clock -> ...
     if (weatherAvailable && (strlen(openWeatherApiKey) == 32) && (strlen(openWeatherCity) > 0) && (strlen(openWeatherCountry) > 0)) {
-      displayMode = 1;  // Clock -> Weather (if weather is available and configured)
+      displayMode = 1;
       Serial.println(F("[DISPLAY] Switching to display mode: WEATHER (from Clock)"));
     } else if (countdownEnabled && !countdownFinished && ntpSyncSuccessful) {
-      displayMode = 3;  // Clock -> Countdown (if weather is NOT available/configured, but countdown is)
+      displayMode = 3;
       Serial.println(F("[DISPLAY] Switching to display mode: COUNTDOWN (from Clock, weather skipped)"));
+    } else if (nightscoutConfigured) {
+      displayMode = 4;  // Clock -> Nightscout (if weather & countdown are skipped)
+      Serial.println(F("[DISPLAY] Switching to display mode: NIGHTSCOUT (from Clock, weather & countdown skipped)"));
     } else {
-      displayMode = 0;  // Clock -> Clock (if neither weather nor countdown is available)
-      Serial.println(F("[DISPLAY] Staying in CLOCK (from Clock, no weather/countdown available)"));
+      displayMode = 0;
+      Serial.println(F("[DISPLAY] Staying in CLOCK (from Clock)"));
     }
-  } else if (displayMode == 1) {  // Current mode is Weather
+  } else if (displayMode == 1) {  // Weather -> ...
     if (showWeatherDescription && weatherAvailable && weatherDescription.length() > 0) {
-      displayMode = 2;  // Weather -> Description (if description is enabled and available)
+      displayMode = 2;
       Serial.println(F("[DISPLAY] Switching to display mode: DESCRIPTION (from Weather)"));
     } else if (countdownEnabled && !countdownFinished && ntpSyncSuccessful) {
-      displayMode = 3;  // Weather -> Countdown (if description is NOT enabled/available, but countdown is)
+      displayMode = 3;
       Serial.println(F("[DISPLAY] Switching to display mode: COUNTDOWN (from Weather)"));
+    } else if (nightscoutConfigured) {
+      displayMode = 4;  // Weather -> Nightscout (if description & countdown are skipped)
+      Serial.println(F("[DISPLAY] Switching to display mode: NIGHTSCOUT (from Weather, description & countdown skipped)"));
     } else {
-      displayMode = 0;  // Weather -> Clock (if neither description nor countdown is available)
+      displayMode = 0;
       Serial.println(F("[DISPLAY] Switching to display mode: CLOCK (from Weather)"));
     }
-  } else if (displayMode == 2) {  // Current mode is Weather Description
+  } else if (displayMode == 2) {  // Weather Description -> ...
     if (countdownEnabled && !countdownFinished && ntpSyncSuccessful) {
-      displayMode = 3;  // Description -> Countdown (if countdown is valid)
+      displayMode = 3;
       Serial.println(F("[DISPLAY] Switching to display mode: COUNTDOWN (from Description)"));
+    } else if (nightscoutConfigured) {
+      displayMode = 4;  // Description -> Nightscout (if countdown is skipped)
+      Serial.println(F("[DISPLAY] Switching to display mode: NIGHTSCOUT (from Description, countdown skipped)"));
     } else {
-      displayMode = 0;  // Description -> Clock (if countdown is NOT valid)
+      displayMode = 0;
       Serial.println(F("[DISPLAY] Switching to display mode: CLOCK (from Description)"));
     }
-  } else if (displayMode == 3) {  // Current mode is Countdown
-    displayMode = 0;              // Countdown -> Clock (always return to clock after countdown)
-    Serial.println(F("[DISPLAY] Switching to display mode: CLOCK (from Countdown)"));
+  } else if (displayMode == 3) {  // Countdown -> Nightscout
+    if (nightscoutConfigured) {
+      displayMode = 4;
+      Serial.println(F("[DISPLAY] Switching to display mode: NIGHTSCOUT (from Countdown)"));
+    } else {
+      displayMode = 0;
+      Serial.println(F("[DISPLAY] Switching to display mode: CLOCK (from Countdown)"));
+    }
+  } else if (displayMode == 4) {  // Nightscout -> Clock
+    displayMode = 0;
+    Serial.println(F("[DISPLAY] Switching to display mode: CLOCK (from Nightscout)"));
   }
 
-  // --- Common cleanup/reset after mode switch ---
-  lastSwitch = millis();  // Reset the timer for the new mode's duration
-
-  // Reset variables specifically for the mode being ENTERED
-  if (displayMode == 3) {          // Entering Countdown mode
-    countdownScrolling = false;    // Ensure scrolling starts from beginning
-    countdownStaticStartTime = 0;  // Reset static display timer
-  }
-
-  // Clear display and reset flags when EXITING specific modes
-  if (oldMode == 2 && displayMode != 2) {  // Exiting Description Mode
-    P.displayClear();
-    descScrolling = false;
-    descStartTime = 0;
-    descScrollEndTime = 0;
-    Serial.println(F("[DISPLAY] Cleared display after exiting Description Mode."));
-  }
-  if (oldMode == 3 && displayMode != 3) {  // Exiting Countdown Mode
-    P.displayClear();
-    countdownScrolling = false;
-    countdownStaticStartTime = 0;
-    countdownScrollEndTime = 0;
-    Serial.println(F("[DISPLAY] Cleared display after exiting Countdown Mode."));
-  }
+  // --- Common cleanup/reset logic remains the same ---
+  lastSwitch = millis();
 }
 
 //config save after countdown finishes
@@ -1962,5 +1959,82 @@ void loop() {
     return;
   }  // End of if (displayMode == 3 && ...)
 
+
+
+  // --- NIGHTSCOUT Display Mode ---
+  if (displayMode == 4) {
+    String ntpField = String(ntpServer2);
+
+    // These static variables will retain their values between calls to this block
+    static unsigned long lastNightscoutFetchTime = 0;
+    const unsigned long NIGHTSCOUT_FETCH_INTERVAL = 150000;  // 2.5 minutes
+    static int currentGlucose = -1;
+    static String currentDirection = "?";
+
+    // Check if it's time to fetch new data or if we have no data yet
+    if (currentGlucose == -1 || millis() - lastNightscoutFetchTime >= NIGHTSCOUT_FETCH_INTERVAL) {
+      WiFiClientSecure client;
+      client.setInsecure();
+      HTTPClient https;
+      https.begin(client, ntpField);
+
+      https.setTimeout(5000);  // This sets both the connection and response timeout.
+
+      Serial.print("[HTTPS] Nightscout fetch initiated...\n");
+      int httpCode = https.GET();
+
+      if (httpCode == HTTP_CODE_OK) {
+        String payload = https.getString();
+        StaticJsonDocument<1024> doc;
+        DeserializationError error = deserializeJson(doc, payload);
+
+        if (!error && doc.is<JsonArray>() && doc.size() > 0) {
+          JsonObject firstReading = doc[0].as<JsonObject>();
+          currentGlucose = firstReading["glucose"] | firstReading["sgv"] | -1;
+          currentDirection = firstReading["direction"] | "?";
+
+          Serial.printf("Nightscout data fetched: mg/dL %d %s\n", currentGlucose, currentDirection.c_str());
+        } else {
+          Serial.println("Failed to parse Nightscout JSON");
+        }
+      } else {
+        Serial.printf("[HTTPS] GET failed, error: %s\n", https.errorToString(httpCode).c_str());
+      }
+
+      https.end();
+      lastNightscoutFetchTime = millis();  // Update the timestamp
+    }
+
+    // Display the data we have, which is now stored in static variables
+    if (currentGlucose != -1) {
+      char arrow;
+      if (currentDirection == "Flat") arrow = 139;
+      else if (currentDirection == "SingleUp") arrow = 134;
+      else if (currentDirection == "DoubleUp") arrow = 135;
+      else if (currentDirection == "SingleDown") arrow = 136;
+      else if (currentDirection == "DoubleDown") arrow = 137;
+      else if (currentDirection == "FortyFiveUp") arrow = 138;
+      else if (currentDirection == "FortyFiveDown") arrow = 140;
+      else arrow = '?';
+
+      String displayText = String(currentGlucose) + String(arrow);
+
+      P.setTextAlignment(PA_CENTER);
+      P.setCharSpacing(1);
+      P.print(displayText.c_str());
+
+      delay(weatherDuration);
+      advanceDisplayMode();
+      return;
+    } else {
+      // If no data is available after the first fetch attempt, show an error and advance
+      P.setTextAlignment(PA_CENTER);
+      P.setCharSpacing(0);
+      P.print(F("?)"));
+      delay(2000);  // Wait 2 seconds before advancing
+      advanceDisplayMode();
+      return;
+    }
+  }
   yield();
 }

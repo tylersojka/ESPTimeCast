@@ -68,7 +68,7 @@ Want to give your ESPTimeCast a home? You can 3D print a custom case for it!
 |  D8   |  15  |  12  |   DIN  |
 |  5V  |  5V  |  5V  |   VCC  | 
 
-<img src="assets/wiring.png" alt="Wiring" width="800" />
+<img src="assets/wiring2.png" alt="Wiring" width="800" />
 
 **Important hardware update:**  
 After observing overheating issues and unstable behavior when powering the MAX7219 matrix from the Mini D1’s 3.3V pin, we’re officially switching to powering the display via the 5V USB rail instead.  
@@ -267,6 +267,7 @@ If you enjoy this project, please consider supporting my work:
 
 [![Donate via PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg?logo=paypal)](https://www.paypal.me/officialuphoto)
 [![GitHub Sponsors](https://img.shields.io/badge/GitHub-Sponsor-fafbfc?logo=github&logoColor=ea4aaa)](https://github.com/sponsors/mfactory-osaka) 
+
 
 
 

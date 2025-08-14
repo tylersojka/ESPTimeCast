@@ -88,7 +88,7 @@
   input[type="time"]:disabled ,
   input[type="text"]:disabled ,
   input[type="number"]:disabled ,
-  input[type="date"]:disabled {
+  input[type="date"]:disabled{
     color: rgba(255, 255, 255, 0.250);
   }
 
@@ -105,6 +105,19 @@
 input[type="time"]::-webkit-calendar-picker-indicator, input[type="date"]::-webkit-calendar-picker-indicator{
   filter: invert(100%);
 }
+
+
+/* Enabled & checked toggle */
+.toggle-switch input[type="checkbox"]:checked + .toggle-slider {
+  background-color: var(--accent-color);
+}
+
+/* Disabled toggle (regardless of checked state) */
+.toggle-switch input[type="checkbox"]:disabled + .toggle-slider { background-color: transparent !important; border: solid 1px #cccccc2e; cursor: not-allowed; }
+.toggle-switch input[type="checkbox"]:disabled + .toggle-slider::before {
+  background-color: rgba(204, 204, 204, 0.5);
+}
+
 
   input:-webkit-autofill,
 input:-webkit-autofill:focus,
@@ -581,6 +594,15 @@ textarea::placeholder {
                 </span>
             </label>
         </div>
+        <div class="form-group">
+          <label style="display: flex; align-items: center; justify-content: space-between;">
+            <span style="margin-right: 0.5em;">Dramatic Countdown:</span>
+            <span class="toggle-switch">
+                <input type="checkbox" id="isDramaticCountdown" name="isDramaticCountdown">
+                <span class="toggle-slider"></span>
+            </span>
+          </label>
+        </div>
         <div class="form-row two-col">
           <div class="form-group">
               <label for="countdownDate">Countdown Date:</label>
@@ -696,6 +718,7 @@ document.getElementById('dimEndTime').value =
       setDimmingFieldsEnabled(!!data.dimmingEnabled);
 
       // --- NEW: Populate Countdown Fields ---
+      document.getElementById('isDramaticCountdown').checked = !!(data.countdown && data.countdown.isDramaticCountdown);
       const countdownEnabledEl = document.getElementById('countdownEnabled'); // Get reference
       countdownEnabledEl.checked = !!(data.countdown && data.countdown.enabled);
 
@@ -742,6 +765,12 @@ document.getElementById('dimEndTime').value =
           setCountdownEnabled(this.checked);       // Sends command to ESP
           setCountdownFieldsEnabled(this.checked); // Enables/disables local fields
       });
+
+const dramaticCountdownEl = document.getElementById('isDramaticCountdown');
+dramaticCountdownEl.addEventListener('change', function () {
+    setIsDramaticCountdown(this.checked);
+});
+
       // Set initial state of fields when page loads
       setCountdownFieldsEnabled(countdownEnabledEl.checked);
       // --- END NEW ---
@@ -831,6 +860,7 @@ async function submitConfig(event) {
 
   // --- NEW: Countdown Form Data ---
   formData.set('countdownEnabled', document.getElementById('countdownEnabled').checked ? 'true' : 'false');
+  formData.set('isDramaticCountdown', document.getElementById('isDramaticCountdown').checked ? 'true' : 'false');
   // Date and Time inputs are already handled by formData if they have a 'name' attribute
   // 'countdownDate' and 'countdownTime' are collected automatically
   // Also apply the same validation for the label when submitting
@@ -1162,6 +1192,7 @@ function setCountdownFieldsEnabled(enabled) {
   document.getElementById('countdownLabel').disabled = !enabled;
   document.getElementById('countdownDate').disabled = !enabled;
   document.getElementById('countdownTime').disabled = !enabled;
+  document.getElementById('isDramaticCountdown').disabled = !enabled;
 }
 
 // Existing function to send countdown enable/disable command to ESP
@@ -1172,6 +1203,15 @@ function setCountdownEnabled(val) {
         body: "value=" + (val ? 1 : 0) // Send 1 for true, 0 for false
     });
 }
+
+function setIsDramaticCountdown(val) {
+    fetch('/set_dramatic_countdown', {
+        method: 'POST',
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: "value=" + (val ? 1 : 0) // Send 1 for true, 0 for false
+    });
+}
+
 // --- END Countdown Controls Logic ---
 
 

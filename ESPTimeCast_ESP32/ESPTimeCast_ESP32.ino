@@ -68,6 +68,7 @@ int dimBrightness = 2;  // Dimming level (0-15)
 bool countdownEnabled = false;
 time_t countdownTargetTimestamp = 0;  // Unix timestamp
 char countdownLabel[64] = "";         // Label for the countdown
+bool isDramaticCountdown = true;     // Default to the dramatic countdown mode
 
 // State management
 bool weatherCycleStarted = false;
@@ -188,6 +189,7 @@ void loadConfig() {
     countdownObj["enabled"] = false;
     countdownObj["targetTimestamp"] = 0;
     countdownObj["label"] = "";
+    countdownObj["isDramaticCountdown"] = true;
 
     File f = LittleFS.open("/config.json", "w");
     if (f) {
@@ -265,6 +267,7 @@ void loadConfig() {
 
     countdownEnabled = countdownObj["enabled"] | false;
     countdownTargetTimestamp = countdownObj["targetTimestamp"] | 0;
+    isDramaticCountdown = countdownObj["isDramaticCountdown"] | true; 
 
     JsonVariant labelVariant = countdownObj["label"];
     if (labelVariant.isNull() || !labelVariant.is<const char *>()) {
@@ -282,6 +285,7 @@ void loadConfig() {
     countdownEnabled = false;
     countdownTargetTimestamp = 0;
     strcpy(countdownLabel, "");
+    isDramaticCountdown = true; 
     Serial.println(F("[CONFIG] Countdown object not found, defaulting to disabled."));
     countdownFinished = false;
   }
@@ -505,6 +509,8 @@ void printConfigToSerial() {
   Serial.println(countdownTargetTimestamp);
   Serial.print(F("Countdown Label: "));
   Serial.println(countdownLabel);
+  Serial.print(F("Dramatic Countdown Display: "));
+  Serial.println(isDramaticCountdown ? "Yes" : "No");
   Serial.println(F("========================================"));
   Serial.println();
 }
@@ -593,6 +599,7 @@ void setupWebServer() {
     String countdownDateStr = request->hasParam("countdownDate", true) ? request->getParam("countdownDate", true)->value() : "";
     String countdownTimeStr = request->hasParam("countdownTime", true) ? request->getParam("countdownTime", true)->value() : "";
     String countdownLabelStr = request->hasParam("countdownLabel", true) ? request->getParam("countdownLabel", true)->value() : "";
+    bool newIsDramaticCountdown = (request->hasParam("isDramaticCountdown", true) && (request->getParam("isDramaticCountdown", true)->value() == "true" || request->getParam("isDramaticCountdown", true)->value() == "on" || request->getParam("isDramaticCountdown", true)->value() == "1"));
 
     time_t newTargetTimestamp = 0;
     if (newCountdownEnabled && countdownDateStr.length() > 0 && countdownTimeStr.length() > 0) {
@@ -624,6 +631,7 @@ void setupWebServer() {
     countdownObj["enabled"] = newCountdownEnabled;
     countdownObj["targetTimestamp"] = newTargetTimestamp;
     countdownObj["label"] = countdownLabelStr;
+    countdownObj["isDramaticCountdown"] = newIsDramaticCountdown;
 
     size_t total = LittleFS.totalBytes();
     size_t used = LittleFS.usedBytes();
@@ -918,6 +926,31 @@ void setupWebServer() {
     request->send(200, "application/json", "{\"ok\":true}");
   });
 
+
+server.on("/set_dramatic_countdown", HTTP_POST, [](AsyncWebServerRequest *request) {
+  bool enableDramaticNow = false;
+  if (request->hasParam("value", true)) {
+    String v = request->getParam("value", true)->value();
+    enableDramaticNow = (v == "1" || v == "true" || v == "on");
+  }
+
+  // Check if the state has changed
+  if (isDramaticCountdown == enableDramaticNow) {
+    Serial.println(F("[WEBSERVER] Dramatic Countdown state unchanged, ignoring."));
+    request->send(200, "application/json", "{\"ok\":true}");
+    return;
+  }
+
+  // Update the global variable
+  isDramaticCountdown = enableDramaticNow;
+  
+  // Call saveCountdownConfig with only the existing parameters.
+  // It will read the updated global variable 'isDramaticCountdown'.
+  saveCountdownConfig(countdownEnabled, countdownTargetTimestamp, countdownLabel);
+
+  Serial.printf("[WEBSERVER] Set Dramatic Countdown to %d\n", isDramaticCountdown);
+  request->send(200, "application/json", "{\"ok\":true}");
+});
 
 
   server.begin();
@@ -1376,6 +1409,7 @@ bool saveCountdownConfig(bool enabled, time_t targetTimestamp, const String &lab
   countdownObj["enabled"] = enabled;
   countdownObj["targetTimestamp"] = targetTimestamp;
   countdownObj["label"] = label;
+  countdownObj["isDramaticCountdown"] = isDramaticCountdown;
   doc.remove("countdownEnabled");
   doc.remove("countdownDate");
   doc.remove("countdownTime");
@@ -1769,9 +1803,8 @@ void loop() {
     long timeRemaining = countdownTargetTimestamp - now_time;
 
     // --- Countdown Finished Logic ---
-    // This 'if' block now handles the entire "finished" sequence (hourglass + flashing).
+    // This part of the code remains unchanged.
     if (timeRemaining <= 0 || countdownShowFinishedMessage) {
-
       // NEW: Only show "TIMES UP" if countdown target timestamp is valid and expired
       time_t now = time(nullptr);
       if (countdownTargetTimestamp == 0 || countdownTargetTimestamp > now) {
@@ -1858,165 +1891,197 @@ void loop() {
       }
     }  // END of 'if (timeRemaining <= 0 || countdownShowFinishedMessage)'
 
-    // --- Normal Countdown Segments (Only if not in finished state) ---
+
+    // --- NORMAL COUNTDOWN LOGIC ---
     // This 'else' block will only run if `timeRemaining > 0` and `!countdownShowFinishedMessage`
     else {
-      long days = timeRemaining / (24 * 3600);
-      long hours = (timeRemaining % (24 * 3600)) / 3600;
-      long minutes = (timeRemaining % 3600) / 60;
-      long seconds = timeRemaining % 60;
 
-      String currentSegmentText = "";
+      // The new variable `isDramaticCountdown` toggles between the two modes
+      if (isDramaticCountdown) {
+        // --- EXISTING DRAMATIC COUNTDOWN LOGIC ---
+        long days = timeRemaining / (24 * 3600);
+        long hours = (timeRemaining % (24 * 3600)) / 3600;
+        long minutes = (timeRemaining % 3600) / 60;
+        long seconds = timeRemaining % 60;
+        String currentSegmentText = "";
 
-      if (segmentStartTime == 0 || (millis() - segmentStartTime > SEGMENT_DISPLAY_DURATION)) {
-        segmentStartTime = millis();
-        P.displayClear();
+        if (segmentStartTime == 0 || (millis() - segmentStartTime > SEGMENT_DISPLAY_DURATION)) {
+          segmentStartTime = millis();
+          P.displayClear();
 
-        switch (countdownSegment) {
-          case 0:  // Days
-            if (days > 0) {
-              currentSegmentText = String(days) + " " + (days == 1 ? "DAY" : "DAYS");
-              Serial.printf("[COUNTDOWN-STATIC] Displaying segment %d: %s\n", countdownSegment, currentSegmentText.c_str());
-              countdownSegment++;
-            } else {
-              // Skip days if zero
-              countdownSegment++;
-              segmentStartTime = 0;
-            }
-            break;
-
-          case 1:
-            {  // Hours
-              char buf[10];
-              sprintf(buf, "%02ld HRS", hours);  // pad hours with 0
-              currentSegmentText = String(buf);
-              Serial.printf("[COUNTDOWN-STATIC] Displaying segment %d: %s\n", countdownSegment, currentSegmentText.c_str());
-              countdownSegment++;
-              break;
-            }
-
-          case 2:
-            {  // Minutes
-              char buf[10];
-              sprintf(buf, "%02ld MINS", minutes);  // pad minutes with 0
-              currentSegmentText = String(buf);
-              Serial.printf("[COUNTDOWN-STATIC] Displaying segment %d: %s\n", countdownSegment, currentSegmentText.c_str());
-              countdownSegment++;
-              break;
-            }
-
-          case 3:
-            {
-
-              // --- Otherwise, run countdown segments like before ---
-
-              time_t segmentStartTime = time(nullptr);      // Get fixed start time
-              unsigned long segmentStartMillis = millis();  // Capture start millis for delta
-
-              long nowRemaining = countdownTargetTimestamp - segmentStartTime;
-              long currentSecond = nowRemaining % 60;
-
-              char secondsBuf[10];
-              sprintf(secondsBuf, "%02ld %s", currentSecond, currentSecond == 1 ? "SEC" : "SECS");
-              String secondsText = String(secondsBuf);
-              Serial.printf("[COUNTDOWN-STATIC] Displaying segment 3: %s\n", secondsText.c_str());
-
-              P.displayClear();
-              P.setTextAlignment(PA_CENTER);
-              P.setCharSpacing(1);
-              P.print(secondsText.c_str());
-
-              delay(SEGMENT_DISPLAY_DURATION - 400);  // Show the first seconds value slightly shorter
-
-              unsigned long elapsed = millis() - segmentStartMillis;
-              long adjustedSecond = (countdownTargetTimestamp - segmentStartTime - (elapsed / 1000)) % 60;
-
-              sprintf(secondsBuf, "%02ld %s", adjustedSecond, adjustedSecond == 1 ? "SEC" : "SECS");
-              secondsText = String(secondsBuf);
-
-              P.displayClear();
-              P.setTextAlignment(PA_CENTER);
-              P.setCharSpacing(1);
-              P.print(secondsText.c_str());
-
-              delay(400);  // Short burst to show the updated second clearly
-
-              String label;
-              if (strlen(countdownLabel) > 0) {
-                label = String(countdownLabel);
-                label.trim();
-                if (!label.startsWith("TO:") && !label.startsWith("to:")) {
-                  label = "TO: " + label;
-                }
-                label.replace('.', ',');
+          switch (countdownSegment) {
+            case 0:  // Days
+              if (days > 0) {
+                currentSegmentText = String(days) + " " + (days == 1 ? "DAY" : "DAYS");
+                Serial.printf("[COUNTDOWN-STATIC] Displaying segment %d: %s\n", countdownSegment, currentSegmentText.c_str());
+                countdownSegment++;
               } else {
-                static const char *fallbackLabels[] = {
-                  "TO: PARTY TIME!",
-                  "TO: SHOWTIME!",
-                  "TO: CLOCKOUT!",
-                  "TO: BLASTOFF!",
-                  "TO: GO TIME!",
-                  "TO: LIFTOFF!",
-                  "TO: THE BIG REVEAL!",
-                  "TO: ZERO HOUR!",
-                  "TO: THE FINAL COUNT!",
-                  "TO: MISSION COMPLETE"
-                };
-                int randomIndex = random(0, 10);
-                label = fallbackLabels[randomIndex];
+                // Skip days if zero
+                countdownSegment++;
+                segmentStartTime = 0;
               }
-
-              P.setTextAlignment(PA_LEFT);
-              P.setCharSpacing(1);
-              textEffect_t actualScrollDirection = getEffectiveScrollDirection(PA_SCROLL_LEFT, flipDisplay);
-              P.displayScroll(label.c_str(), PA_LEFT, actualScrollDirection, GENERAL_SCROLL_SPEED);
-
-              // --- THIS IS THE BLOCKING LOOP THAT REMAINS PER YOUR REQUEST ---
-              while (!P.displayAnimate()) {
-                yield();
-              }
-
-              countdownSegment++;
-              segmentStartTime = millis();
               break;
-            }
+            case 1:
+              {  // Hours
+                char buf[10];
+                sprintf(buf, "%02ld HRS", hours);  // pad hours with 0
+                currentSegmentText = String(buf);
+                Serial.printf("[COUNTDOWN-STATIC] Displaying segment %d: %s\n", countdownSegment, currentSegmentText.c_str());
+                countdownSegment++;
+                break;
+              }
+            case 2:
+              {  // Minutes
+                char buf[10];
+                sprintf(buf, "%02ld MINS", minutes);  // pad minutes with 0
+                currentSegmentText = String(buf);
+                Serial.printf("[COUNTDOWN-STATIC] Displaying segment %d: %s\n", countdownSegment, currentSegmentText.c_str());
+                countdownSegment++;
+                break;
+              }
+            case 3:
+              {  // Seconds & Label Scroll
+                time_t segmentStartTime = time(nullptr);
+                unsigned long segmentStartMillis = millis();
 
-          case 4:  // Exit countdown
-            Serial.println("[COUNTDOWN-STATIC] All countdown segments and label displayed. Advancing to Clock.");
-            countdownSegment = 0;
-            segmentStartTime = 0;
+                long nowRemaining = countdownTargetTimestamp - segmentStartTime;
+                long currentSecond = nowRemaining % 60;
+                char secondsBuf[10];
+                sprintf(secondsBuf, "%02ld %s", currentSecond, currentSecond == 1 ? "SEC" : "SECS");
+                String secondsText = String(secondsBuf);
+                Serial.printf("[COUNTDOWN-STATIC] Displaying segment 3: %s\n", secondsText.c_str());
+                P.displayClear();
+                P.setTextAlignment(PA_CENTER);
+                P.setCharSpacing(1);
+                P.print(secondsText.c_str());
+                delay(SEGMENT_DISPLAY_DURATION - 400);
 
+                unsigned long elapsed = millis() - segmentStartMillis;
+                long adjustedSecond = (countdownTargetTimestamp - segmentStartTime - (elapsed / 1000)) % 60;
+                sprintf(secondsBuf, "%02ld %s", adjustedSecond, adjustedSecond == 1 ? "SEC" : "SECS");
+                secondsText = String(secondsBuf);
+                P.displayClear();
+                P.setTextAlignment(PA_CENTER);
+                P.setCharSpacing(1);
+                P.print(secondsText.c_str());
+                delay(400);
+
+                String label;
+                if (strlen(countdownLabel) > 0) {
+                  label = String(countdownLabel);
+                  label.trim();
+                  if (!label.startsWith("TO:") && !label.startsWith("to:")) {
+                    label = "TO: " + label;
+                  }
+                  label.replace('.', ',');
+                } else {
+                  static const char *fallbackLabels[] = {
+                    "TO: PARTY TIME!", "TO: SHOWTIME!", "TO: CLOCKOUT!", "TO: BLASTOFF!",
+                    "TO: GO TIME!", "TO: LIFTOFF!", "TO: THE BIG REVEAL!",
+                    "TO: ZERO HOUR!", "TO: THE FINAL COUNT!", "TO: MISSION COMPLETE"
+                  };
+                  int randomIndex = random(0, 10);
+                  label = fallbackLabels[randomIndex];
+                }
+
+                P.setTextAlignment(PA_LEFT);
+                P.setCharSpacing(1);
+                textEffect_t actualScrollDirection = getEffectiveScrollDirection(PA_SCROLL_LEFT, flipDisplay);
+                P.displayScroll(label.c_str(), PA_LEFT, actualScrollDirection, GENERAL_SCROLL_SPEED);
+
+                while (!P.displayAnimate()) {
+                  yield();
+                }
+                countdownSegment++;
+                segmentStartTime = millis();
+                break;
+              }
+            case 4:  // Exit countdown
+              Serial.println("[COUNTDOWN-STATIC] All segments and label displayed. Advancing to Clock.");
+              countdownSegment = 0;
+              segmentStartTime = 0;
+              P.setTextAlignment(PA_CENTER);
+              P.setCharSpacing(1);
+              advanceDisplayMode();
+              yield();
+              return;
+
+            default:
+              Serial.println("[COUNTDOWN-ERROR] Invalid countdownSegment, resetting.");
+              countdownSegment = 0;
+              segmentStartTime = 0;
+              break;
+          }
+
+          if (currentSegmentText.length() > 0) {
             P.setTextAlignment(PA_CENTER);
             P.setCharSpacing(1);
-            advanceDisplayMode();
-            yield();
-            return;
-
-          default:
-            Serial.println("[COUNTDOWN-ERROR] Invalid countdownSegment, resetting.");
-            countdownSegment = 0;
-            segmentStartTime = 0;
-            break;
+            P.print(currentSegmentText.c_str());
+          }
         }
-
-        if (currentSegmentText.length() > 0) {
-          P.setTextAlignment(PA_CENTER);
-          P.setCharSpacing(1);
-          P.print(currentSegmentText.c_str());
-        }
+        P.displayAnimate();
       }
 
-      P.displayAnimate();  // This handles regular segment display updates
-    }                      // End of 'else' (Normal Countdown Segments)
+ // --- NEW: SINGLE-LINE COUNTDOWN LOGIC ---
+      else {
+        long days = timeRemaining / (24 * 3600);
+        long hours = (timeRemaining % (24 * 3600)) / 3600;
+        long minutes = (timeRemaining % 3600) / 60;
+        long seconds = timeRemaining % 60;
 
-    // Keep alignment reset just in case
-    P.setTextAlignment(PA_CENTER);
-    P.setCharSpacing(1);
-    yield();
-    return;
-  }  // End of if (displayMode == 3 && ...)
+        String label;
+        // Check if countdownLabel is empty and grab a random one if needed
+        if (strlen(countdownLabel) > 0) {
+          label = String(countdownLabel);
+          label.trim();
+        } else {
+          static const char *fallbackLabels[] = {
+            "PARTY TIME", "SHOWTIME", "CLOCKOUT", "BLASTOFF",
+            "GO TIME", "LIFTOFF", "THE BIG REVEAL",
+            "ZERO HOUR", "THE FINAL COUNT", "MISSION COMPLETE"
+          };
+          int randomIndex = random(0, 10);
+          label = fallbackLabels[randomIndex];
+        }
 
+        // Format the full string
+        char buf[50];
+        // Only show days if there are any, otherwise start with hours
+        if (days > 0) {
+          sprintf(buf, "%s IN: %ldD %02ldH %02ldM %02ldS", label.c_str(), days, hours, minutes, seconds);
+        } else {
+          sprintf(buf, "%s IN: %02ldH %02ldM %02ldS", label.c_str(), hours, minutes, seconds);
+        }
+        
+        String fullString = String(buf);
+        
+        // Display the full string and scroll it
+        P.displayClear();
+        P.setTextAlignment(PA_LEFT);
+        P.setCharSpacing(1);
+        textEffect_t actualScrollDirection = getEffectiveScrollDirection(PA_SCROLL_LEFT, flipDisplay);
+        P.displayScroll(fullString.c_str(), PA_LEFT, actualScrollDirection, GENERAL_SCROLL_SPEED);
 
+        // Blocking loop to ensure the full message scrolls
+        while (!P.displayAnimate()) {
+          yield();
+        }
+
+        // After scrolling is complete, we're done with this display mode
+        // Move to the next mode and exit the function.
+        P.setTextAlignment(PA_CENTER);
+        advanceDisplayMode();
+        yield();
+        return;
+      }
+  }
+
+  // Keep alignment reset just in case
+  P.setTextAlignment(PA_CENTER);
+  P.setCharSpacing(1);
+  yield();
+  return;
+}  // End of if (displayMode == 3 && ...)
 
 
   // --- NIGHTSCOUT Display Mode ---

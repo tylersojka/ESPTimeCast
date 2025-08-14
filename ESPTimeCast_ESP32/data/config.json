@@ -28,6 +28,7 @@
   "countdown": {
     "enabled": false,
     "targetTimestamp": 0,
-    "label": ""
+    "label": "",
+    "isDramaticCountdown": true
   }
 }

@@ -322,7 +322,7 @@ textarea::placeholder {
   <button type="button" class="primary-button" id="geo-button" onclick="getLocation()" style="margin-top: 1rem;">Get My Location</button>
 
   <div class="small">    
-    <strong>Location format examples:</strong> City, Country Code - Osaka, JP | ZIP,Country Code - 94040, US | Latitude, Longitude - 34.6937, 135.5023
+    <strong>Location format examples:</strong> City, Country Code - Osaka, JP | ZIP, Country Code - 94040, US | Latitude, Longitude - 34.6937, 135.5023
   </div>
   <div class="geo-note" style="display: none;">
     <br>
@@ -496,6 +496,14 @@ textarea::placeholder {
         </label>
 
         <label style="display: flex; align-items: center; margin-top: 1.75rem; justify-content: space-between;">
+          <span style="margin-right: 0.5em;">Show Date:</span>
+          <span class="toggle-switch">
+            <input type="checkbox" id="showDate" name="showDate" onchange="setShowDate(this.checked)">
+            <span class="toggle-slider"></span>
+          </span>
+        </label>
+
+        <label style="display: flex; align-items: center; margin-top: 1.75rem; justify-content: space-between;">
           <span style="margin-right: 0.5em;">Display 12-hour Clock:</span>
           <span class="toggle-switch">
             <input type="checkbox" id="twelveHourToggle" name="twelveHourToggle" onchange="setTwelveHour(this.checked)">
@@ -655,6 +663,7 @@ window.onload = function () {
       document.getElementById('ntpServer2').value = data.ntpServer2 || "";
       document.getElementById('twelveHourToggle').checked = !!data.twelveHourToggle;
       document.getElementById('showDayOfWeek').checked = !!data.showDayOfWeek;
+      document.getElementById('showDate').checked = !!data.showDate;
       document.getElementById('showHumidity').checked = !!data.showHumidity;
       document.getElementById('colonBlinkEnabled').checked = !!data.colonBlinkEnabled;
       document.getElementById('showWeatherDescription').checked = !!data.showWeatherDescription;
@@ -796,6 +805,7 @@ async function submitConfig(event) {
   formData.set('flipDisplay', document.getElementById('flipDisplay').checked ? 'on' : '');
   formData.set('twelveHourToggle', document.getElementById('twelveHourToggle').checked ? 'on' : '');
   formData.set('showDayOfWeek', document.getElementById('showDayOfWeek').checked ? 'on' : '');
+  formData.set('showDate', document.getElementById('showDate').checked ? 'on' : '');
   formData.set('showHumidity', document.getElementById('showHumidity').checked ? 'on' : '');
   formData.set('colonBlinkEnabled', document.getElementById('colonBlinkEnabled').checked ? 'on' : '');
 
@@ -1092,6 +1102,14 @@ function setTwelveHour(val) {
 
 function setShowDayOfWeek(val) {
   fetch('/set_dayofweek', {
+    method: 'POST',
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "value=" + (val ? 1 : 0)
+  });
+}
+
+function setShowDate(val) {
+  fetch('/set_showdate', {
     method: 'POST',
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: "value=" + (val ? 1 : 0)

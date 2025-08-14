@@ -13,9 +13,10 @@
 #include <time.h>
 #include <WiFiClientSecure.h>
 
-#include "mfactoryfont.h"  // Custom font
-#include "tz_lookup.h"     // Timezone lookup, do not duplicate mapping here!
-#include "days_lookup.h"   // Languages for the Days of the Week
+#include "mfactoryfont.h"   // Custom font
+#include "tz_lookup.h"      // Timezone lookup, do not duplicate mapping here!
+#include "days_lookup.h"    // Languages for the Days of the Week
+#include "months_lookup.h"  // Languages for the Months of the Year
 
 #define HARDWARE_TYPE MD_MAX72XX::FC16_HW
 #define MAX_DEVICES 4
@@ -49,6 +50,7 @@ int brightness = 7;
 bool flipDisplay = false;
 bool twelveHourToggle = false;
 bool showDayOfWeek = true;
+bool showDate = false;
 bool showHumidity = false;
 bool colonBlinkEnabled = true;
 char ntpServer1[64] = "pool.ntp.org";
@@ -168,6 +170,7 @@ void loadConfig() {
     doc[F("flipDisplay")] = flipDisplay;
     doc[F("twelveHourToggle")] = twelveHourToggle;
     doc[F("showDayOfWeek")] = showDayOfWeek;
+    doc[F("showDate")] = false;
     doc[F("showHumidity")] = showHumidity;
     doc[F("colonBlinkEnabled")] = colonBlinkEnabled;
     doc[F("ntpServer1")] = ntpServer1;
@@ -233,8 +236,10 @@ void loadConfig() {
   flipDisplay = doc["flipDisplay"] | false;
   twelveHourToggle = doc["twelveHourToggle"] | false;
   showDayOfWeek = doc["showDayOfWeek"] | true;
+  showDate = doc["showDate"] | false;
   showHumidity = doc["showHumidity"] | false;
   colonBlinkEnabled = doc.containsKey("colonBlinkEnabled") ? doc["colonBlinkEnabled"].as<bool>() : true;
+  showWeatherDescription = doc["showWeatherDescription"] | false;
 
   String de = doc["dimmingEnabled"].as<String>();
   dimmingEnabled = (de == "true" || de == "on" || de == "1");
@@ -253,10 +258,6 @@ void loadConfig() {
   else
     tempSymbol = '[';
 
-  if (doc.containsKey("showWeatherDescription"))
-    showWeatherDescription = doc["showWeatherDescription"];
-  else
-    showWeatherDescription = false;
 
   // --- COUNTDOWN CONFIG LOADING ---
   if (doc.containsKey("countdown")) {
@@ -412,13 +413,33 @@ void setupTime() {
   if (!isAPMode) {
     Serial.println(F("[TIME] Starting NTP sync"));
   }
-  configTime(0, 0, ntpServer1, ntpServer2);
-  setenv("TZ", ianaToPosix(timeZone), 1);
-  tzset();
-  ntpState = NTP_SYNCING;
-  ntpStartTime = millis();
-  ntpRetryCount = 0;
-  ntpSyncSuccessful = false;
+
+  bool serverOk = false;
+  IPAddress resolvedIP;
+
+  // Try first server if it's not empty
+  if (strlen(ntpServer1) > 0 && WiFi.hostByName(ntpServer1, resolvedIP) == 1) {
+    serverOk = true;
+  }
+  // Try second server if first failed
+  else if (strlen(ntpServer2) > 0 && WiFi.hostByName(ntpServer2, resolvedIP) == 1) {
+    serverOk = true;
+  }
+
+  if (serverOk) {
+    configTime(0, 0, ntpServer1, ntpServer2); // safe to call now
+    setenv("TZ", ianaToPosix(timeZone), 1);
+    tzset();
+    ntpState = NTP_SYNCING;
+    ntpStartTime = millis();
+    ntpRetryCount = 0;
+    ntpSyncSuccessful = false;
+  } else {
+    Serial.println(F("[TIME] NTP server lookup failed — skipping sync"));
+    ntpSyncSuccessful = false;
+    ntpState = NTP_IDLE; // or custom NTP_ERROR state
+    // Trigger your error display here if desired
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -454,6 +475,8 @@ void printConfigToSerial() {
   Serial.println(twelveHourToggle ? "Yes" : "No");
   Serial.print(F("Show Day of the Week: "));
   Serial.println(showDayOfWeek ? "Yes" : "No");
+  Serial.print(F("Show Date: "));
+  Serial.println(showDate ? "Yes" : "No");
   Serial.print(F("Show Weather Description: "));
   Serial.println(showWeatherDescription ? "Yes" : "No");
   Serial.print(F("Show Humidity: "));
@@ -550,6 +573,7 @@ void setupWebServer() {
       else if (n == "flipDisplay") doc[n] = (v == "true" || v == "on" || v == "1");
       else if (n == "twelveHourToggle") doc[n] = (v == "true" || v == "on" || v == "1");
       else if (n == "showDayOfWeek") doc[n] = (v == "true" || v == "on" || v == "1");
+      else if (n == "showDate") doc[n] = (v == "true" || v == "on" || v == "1");
       else if (n == "showHumidity") doc[n] = (v == "true" || v == "on" || v == "1");
       else if (n == "colonBlinkEnabled") doc[n] = (v == "true" || v == "on" || v == "1");
       else if (n == "dimStartHour") doc[n] = v.toInt();
@@ -776,6 +800,17 @@ void setupWebServer() {
     }
     showDayOfWeek = showDay;
     Serial.printf("[WEBSERVER] Set showDayOfWeek to %d\n", showDayOfWeek);
+    request->send(200, "application/json", "{\"ok\":true}");
+  });
+
+  server.on("/set_showdate", HTTP_POST, [](AsyncWebServerRequest *request) {
+    bool showDateVal = false;
+    if (request->hasParam("value", true)) {
+      String v = request->getParam("value", true)->value();
+      showDateVal = (v == "1" || v == "true" || v == "on");
+    }
+    showDate = showDateVal;
+    Serial.printf("[WEBSERVER] Set showDate to %d\n", showDate);
     request->send(200, "application/json", "{\"ok\":true}");
   });
 
@@ -1188,7 +1223,8 @@ DisplayMode key:
   0: Clock
   1: Weather
   2: Weather Description
-  3: Countdown (NEW)
+  3: Countdown
+  4: Nightscout
 */
 
 void setup() {
@@ -1241,13 +1277,77 @@ void setup() {
 
 
 
+// void advanceDisplayMode() {
+//   int oldMode = displayMode;
+//   String ntpField = String(ntpServer2);
+//   bool nightscoutConfigured = ntpField.startsWith("https://");
+
+//   if (displayMode == 0) {  // Clock -> ...
+//     if (weatherAvailable && (strlen(openWeatherApiKey) == 32) && (strlen(openWeatherCity) > 0) && (strlen(openWeatherCountry) > 0)) {
+//       displayMode = 1;
+//       Serial.println(F("[DISPLAY] Switching to display mode: WEATHER (from Clock)"));
+//     } else if (countdownEnabled && !countdownFinished && ntpSyncSuccessful) {
+//       displayMode = 3;
+//       Serial.println(F("[DISPLAY] Switching to display mode: COUNTDOWN (from Clock, weather skipped)"));
+//     } else if (nightscoutConfigured) {
+//       displayMode = 4;  // Clock -> Nightscout (if weather & countdown are skipped)
+//       Serial.println(F("[DISPLAY] Switching to display mode: NIGHTSCOUT (from Clock, weather & countdown skipped)"));
+//     } else {
+//       displayMode = 0;
+//       Serial.println(F("[DISPLAY] Staying in CLOCK (from Clock)"));
+//     }
+//   } else if (displayMode == 1) {  // Weather -> ...
+//     if (showWeatherDescription && weatherAvailable && weatherDescription.length() > 0) {
+//       displayMode = 2;
+//       Serial.println(F("[DISPLAY] Switching to display mode: DESCRIPTION (from Weather)"));
+//     } else if (countdownEnabled && !countdownFinished && ntpSyncSuccessful) {
+//       displayMode = 3;
+//       Serial.println(F("[DISPLAY] Switching to display mode: COUNTDOWN (from Weather)"));
+//     } else if (nightscoutConfigured) {
+//       displayMode = 4;  // Weather -> Nightscout (if description & countdown are skipped)
+//       Serial.println(F("[DISPLAY] Switching to display mode: NIGHTSCOUT (from Weather, description & countdown skipped)"));
+//     } else {
+//       displayMode = 0;
+//       Serial.println(F("[DISPLAY] Switching to display mode: CLOCK (from Weather)"));
+//     }
+//   } else if (displayMode == 2) {  // Weather Description -> ...
+//     if (countdownEnabled && !countdownFinished && ntpSyncSuccessful) {
+//       displayMode = 3;
+//       Serial.println(F("[DISPLAY] Switching to display mode: COUNTDOWN (from Description)"));
+//     } else if (nightscoutConfigured) {
+//       displayMode = 4;  // Description -> Nightscout (if countdown is skipped)
+//       Serial.println(F("[DISPLAY] Switching to display mode: NIGHTSCOUT (from Description, countdown skipped)"));
+//     } else {
+//       displayMode = 0;
+//       Serial.println(F("[DISPLAY] Switching to display mode: CLOCK (from Description)"));
+//     }
+//   } else if (displayMode == 3) {  // Countdown -> Nightscout
+//     if (nightscoutConfigured) {
+//       displayMode = 4;
+//       Serial.println(F("[DISPLAY] Switching to display mode: NIGHTSCOUT (from Countdown)"));
+//     } else {
+//       displayMode = 0;
+//       Serial.println(F("[DISPLAY] Switching to display mode: CLOCK (from Countdown)"));
+//     }
+//   } else if (displayMode == 4) {  // Nightscout -> Clock
+//     displayMode = 0;
+//     Serial.println(F("[DISPLAY] Switching to display mode: CLOCK (from Nightscout)"));
+//   }
+
+//   // --- Common cleanup/reset logic remains the same ---
+//   lastSwitch = millis();
+// }
+
 void advanceDisplayMode() {
   int oldMode = displayMode;
   String ntpField = String(ntpServer2);
   bool nightscoutConfigured = ntpField.startsWith("https://");
 
   if (displayMode == 0) {  // Clock -> ...
-    if (weatherAvailable && (strlen(openWeatherApiKey) == 32) && (strlen(openWeatherCity) > 0) && (strlen(openWeatherCountry) > 0)) {
+    if (showDate) {
+      displayMode = 5;  // Date mode right after Clock
+      Serial.println(F("[DISPLAY] Switching to display mode: DATE (from Clock)"));
+    } else if (weatherAvailable && (strlen(openWeatherApiKey) == 32) && (strlen(openWeatherCity) > 0) && (strlen(openWeatherCountry) > 0)) {
       displayMode = 1;
       Serial.println(F("[DISPLAY] Switching to display mode: WEATHER (from Clock)"));
     } else if (countdownEnabled && !countdownFinished && ntpSyncSuccessful) {
@@ -1259,6 +1359,20 @@ void advanceDisplayMode() {
     } else {
       displayMode = 0;
       Serial.println(F("[DISPLAY] Staying in CLOCK (from Clock)"));
+    }
+  } else if (displayMode == 5) {  // Date mode
+    if (weatherAvailable && (strlen(openWeatherApiKey) == 32) && (strlen(openWeatherCity) > 0) && (strlen(openWeatherCountry) > 0)) {
+      displayMode = 1;
+      Serial.println(F("[DISPLAY] Switching to display mode: WEATHER (from Date)"));
+    } else if (countdownEnabled && !countdownFinished && ntpSyncSuccessful) {
+      displayMode = 3;
+      Serial.println(F("[DISPLAY] Switching to display mode: COUNTDOWN (from Date, weather skipped)"));
+    } else if (nightscoutConfigured) {
+      displayMode = 4;
+      Serial.println(F("[DISPLAY] Switching to display mode: NIGHTSCOUT (from Date, weather & countdown skipped)"));
+    } else {
+      displayMode = 0;
+      Serial.println(F("[DISPLAY] Switching to display mode: CLOCK (from Date)"));
     }
   } else if (displayMode == 1) {  // Weather -> ...
     if (showWeatherDescription && weatherAvailable && weatherDescription.length() > 0) {
@@ -2034,6 +2148,93 @@ void loop() {
       delay(2000);  // Wait 2 seconds before advancing
       advanceDisplayMode();
       return;
+    }
+  }
+
+  //DATE Display Mode
+  else if (displayMode == 5 && showDate) {
+
+    // --- VALID DATE CHECK ---
+    if (timeinfo.tm_year < 120 || timeinfo.tm_mday <= 0 || timeinfo.tm_mon < 0 || timeinfo.tm_mon > 11) {
+      advanceDisplayMode();
+      return;  // skip drawing
+    }
+    // -------------------------
+    String dateString;
+
+    // Get localized month names
+    const char *const *months = getMonthsOfYear(language);
+    String monthAbbr = String(months[timeinfo.tm_mon]).substring(0, 5);
+    monthAbbr.toLowerCase();
+
+    // Add spaces between day digits
+    String dayString = String(timeinfo.tm_mday);
+    String spacedDay = "";
+    for (size_t i = 0; i < dayString.length(); i++) {
+      spacedDay += dayString[i];
+      if (i < dayString.length() - 1) spacedDay += " ";
+    }
+
+    // Function to check if day should come first for given language
+    auto isDayFirst = [](const String &lang) {
+      // Languages with DD-MM order
+      const char *dayFirstLangs[] = {
+        "af",  // Afrikaans
+        "cs",  // Czech
+        "da",  // Danish
+        "de",  // German
+        "eo",  // Esperanto
+        "es",  // Spanish
+        "et",  // Estonian
+        "fi",  // Finnish
+        "fr",  // French
+        "hr",  // Croatian
+        "hu",  // Hungarian
+        "it",  // Italian
+        "lt",  // Lithuanian
+        "lv",  // Latvian
+        "nl",  // Dutch
+        "no",  // Norwegian
+        "pl",  // Polish
+        "pt",  // Portuguese
+        "ro",  // Romanian
+        "sk",  // Slovak
+        "sl",  // Slovenian
+        "sr",  // Serbian
+        "sv",  // Swedish
+        "sw",  // Swahili
+        "tr"   // Turkish
+      };
+      for (auto lf : dayFirstLangs) {
+        if (lang.equalsIgnoreCase(lf)) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    String langForDate = String(language);
+
+    if (langForDate == "ja") {
+      // Japanese: month number (spaced digits) + day + symbol
+      String spacedMonth = "";
+      String monthNum = String(timeinfo.tm_mon + 1);
+      dateString = monthAbbr + "  " + spacedDay + " ±";
+      
+    } else {
+      if (isDayFirst(language)) {
+        dateString = spacedDay + "   " + monthAbbr;
+      } else {
+        dateString = monthAbbr + "   " + spacedDay;
+      }
+    }
+
+    P.setTextAlignment(PA_CENTER);
+    P.setCharSpacing(0);
+    P.print(dateString);
+
+    if (millis() - lastSwitch > weatherDuration) {
+      advanceDisplayMode();
     }
   }
   yield();

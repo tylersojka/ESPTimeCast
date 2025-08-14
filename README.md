@@ -46,7 +46,7 @@ Want to give your ESPTimeCast a home? You can 3D print a custom case for it!
   - **Flip display** (180 degrees)
   - Adjustable display **brightness**
   - Dimming Hours **Scheduling**
-  - Dramatic **Countdown** function
+  - **Countdown** function (Scroll / Dramatic)
   - Optional **glucose + trend** display (Nightscout-compatible, set via ntpserver2)
     
 ---
@@ -144,7 +144,7 @@ Click the **cog icon** next to “Advanced Settings” in the web UI to reveal e
 - **Flip Display**: Invert the display vertically/horizontally
 - **Brightness**: 0 (dim) to 15 (bright)
 - **Dimming Feature**: Start time, end time and desired brightness selection
-- **Dramatic Countdown** function, set a countdown to your favorit/next event! 
+- **Countdown** function, set a countdown to your favorit/next event, 2 modes: Scroll/Dramatic! 
 
 *Non-English characters converted to their closest English alphabet.  
 Tip: Don't forget to press the save button to keep your settings
@@ -270,6 +270,7 @@ If you enjoy this project, please consider supporting my work:
 
 [![Donate via PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg?logo=paypal)](https://www.paypal.me/officialuphoto)
 [![GitHub Sponsors](https://img.shields.io/badge/GitHub-Sponsor-fafbfc?logo=github&logoColor=ea4aaa)](https://github.com/sponsors/mfactory-osaka) 
+
 
 
 

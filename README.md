@@ -17,7 +17,7 @@ Want to give your ESPTimeCast a home? You can 3D print a custom case for it!
 
 <img src="assets/image01.png" alt="3D Printable Case" width="320" />
 
-[![Printables Downloads](https://img.shields.io/badge/Printables-109%20Downloads-orange?logo=prusa)](https://www.printables.com/model/1344276-esptimecast-wi-fi-clock-weather-display)
+[![Printables Downloads](https://img.shields.io/badge/Printables-110%20Downloads-orange?logo=prusa)](https://www.printables.com/model/1344276-esptimecast-wi-fi-clock-weather-display)
 [![Cults3D Downloads](https://img.shields.io/badge/Cults3D-54%20Downloads-blue?logo=cults3d)](https://cults3d.com/en/3d-model/gadget/wifi-connected-led-matrix-clock-and-weather-station-esp8266-and-max7219)
 
 ---
@@ -146,7 +146,9 @@ Click the **cog icon** next to “Advanced Settings” in the web UI to reveal e
 - **Dimming Feature**: Start time, end time and desired brightness selection
 - **Countdown** function, set a countdown to your favorit/next event, 2 modes: Scroll/Dramatic! 
 
-*Non-English characters converted to their closest English alphabet.  
+*Non-English characters converted to their closest English alphabet.   
+*For Esperanto, Irish, and Swahili, weather description translations are not available. Japanese translations exist, but since the device cannot display all Japanese characters, English will be used in all these cases.  
+
 Tip: Don't forget to press the save button to keep your settings
 
 ---
@@ -270,6 +272,7 @@ If you enjoy this project, please consider supporting my work:
 
 [![Donate via PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg?logo=paypal)](https://www.paypal.me/officialuphoto)
 [![GitHub Sponsors](https://img.shields.io/badge/GitHub-Sponsor-fafbfc?logo=github&logoColor=ea4aaa)](https://github.com/sponsors/mfactory-osaka) 
+
 
 
 

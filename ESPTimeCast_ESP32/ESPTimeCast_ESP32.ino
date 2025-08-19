@@ -68,7 +68,7 @@ int dimBrightness = 2;  // Dimming level (0-15)
 bool countdownEnabled = false;
 time_t countdownTargetTimestamp = 0;  // Unix timestamp
 char countdownLabel[64] = "";         // Label for the countdown
-bool isDramaticCountdown = true;     // Default to the dramatic countdown mode
+bool isDramaticCountdown = true;      // Default to the dramatic countdown mode
 
 // State management
 bool weatherCycleStarted = false;
@@ -267,7 +267,7 @@ void loadConfig() {
 
     countdownEnabled = countdownObj["enabled"] | false;
     countdownTargetTimestamp = countdownObj["targetTimestamp"] | 0;
-    isDramaticCountdown = countdownObj["isDramaticCountdown"] | true; 
+    isDramaticCountdown = countdownObj["isDramaticCountdown"] | true;
 
     JsonVariant labelVariant = countdownObj["label"];
     if (labelVariant.isNull() || !labelVariant.is<const char *>()) {
@@ -285,7 +285,7 @@ void loadConfig() {
     countdownEnabled = false;
     countdownTargetTimestamp = 0;
     strcpy(countdownLabel, "");
-    isDramaticCountdown = true; 
+    isDramaticCountdown = true;
     Serial.println(F("[CONFIG] Countdown object not found, defaulting to disabled."));
     countdownFinished = false;
   }
@@ -430,7 +430,7 @@ void setupTime() {
   }
 
   if (serverOk) {
-    configTime(0, 0, ntpServer1, ntpServer2); // safe to call now
+    configTime(0, 0, ntpServer1, ntpServer2);  // safe to call now
     setenv("TZ", ianaToPosix(timeZone), 1);
     tzset();
     ntpState = NTP_SYNCING;
@@ -440,7 +440,7 @@ void setupTime() {
   } else {
     Serial.println(F("[TIME] NTP server lookup failed — skipping sync"));
     ntpSyncSuccessful = false;
-    ntpState = NTP_IDLE; // or custom NTP_ERROR state
+    ntpState = NTP_IDLE;  // or custom NTP_ERROR state
     // Trigger your error display here if desired
   }
 }
@@ -927,30 +927,30 @@ void setupWebServer() {
   });
 
 
-server.on("/set_dramatic_countdown", HTTP_POST, [](AsyncWebServerRequest *request) {
-  bool enableDramaticNow = false;
-  if (request->hasParam("value", true)) {
-    String v = request->getParam("value", true)->value();
-    enableDramaticNow = (v == "1" || v == "true" || v == "on");
-  }
+  server.on("/set_dramatic_countdown", HTTP_POST, [](AsyncWebServerRequest *request) {
+    bool enableDramaticNow = false;
+    if (request->hasParam("value", true)) {
+      String v = request->getParam("value", true)->value();
+      enableDramaticNow = (v == "1" || v == "true" || v == "on");
+    }
 
-  // Check if the state has changed
-  if (isDramaticCountdown == enableDramaticNow) {
-    Serial.println(F("[WEBSERVER] Dramatic Countdown state unchanged, ignoring."));
+    // Check if the state has changed
+    if (isDramaticCountdown == enableDramaticNow) {
+      Serial.println(F("[WEBSERVER] Dramatic Countdown state unchanged, ignoring."));
+      request->send(200, "application/json", "{\"ok\":true}");
+      return;
+    }
+
+    // Update the global variable
+    isDramaticCountdown = enableDramaticNow;
+
+    // Call saveCountdownConfig with only the existing parameters.
+    // It will read the updated global variable 'isDramaticCountdown'.
+    saveCountdownConfig(countdownEnabled, countdownTargetTimestamp, countdownLabel);
+
+    Serial.printf("[WEBSERVER] Set Dramatic Countdown to %d\n", isDramaticCountdown);
     request->send(200, "application/json", "{\"ok\":true}");
-    return;
-  }
-
-  // Update the global variable
-  isDramaticCountdown = enableDramaticNow;
-  
-  // Call saveCountdownConfig with only the existing parameters.
-  // It will read the updated global variable 'isDramaticCountdown'.
-  saveCountdownConfig(countdownEnabled, countdownTargetTimestamp, countdownLabel);
-
-  Serial.printf("[WEBSERVER] Set Dramatic Countdown to %d\n", isDramaticCountdown);
-  request->send(200, "application/json", "{\"ok\":true}");
-});
+  });
 
 
   server.begin();
@@ -1143,7 +1143,7 @@ String buildWeatherURL() {
 
   String langForAPI = String(language);
 
-  if (langForAPI == "eo" || langForAPI == "sw" || langForAPI == "ja") {
+  if (langForAPI == "eo" || langForAPI == "ga" || langForAPI == "sw" || langForAPI == "ja") {
     langForAPI = "en";
   }
   base += "&lang=" + langForAPI;
@@ -1317,7 +1317,7 @@ void advanceDisplayMode() {
   String ntpField = String(ntpServer2);
   bool nightscoutConfigured = ntpField.startsWith("https://");
 
-  if (displayMode == 0) {  // Clock 
+  if (displayMode == 0) {  // Clock
     if (showDate) {
       displayMode = 5;  // Date mode right after Clock
       Serial.println(F("[DISPLAY] Switching to display mode: DATE (from Clock)"));
@@ -1348,7 +1348,7 @@ void advanceDisplayMode() {
       displayMode = 0;
       Serial.println(F("[DISPLAY] Switching to display mode: CLOCK (from Date)"));
     }
-  } else if (displayMode == 1) {  // Weather 
+  } else if (displayMode == 1) {  // Weather
     if (showWeatherDescription && weatherAvailable && weatherDescription.length() > 0) {
       displayMode = 2;
       Serial.println(F("[DISPLAY] Switching to display mode: DESCRIPTION (from Weather)"));
@@ -1362,7 +1362,7 @@ void advanceDisplayMode() {
       displayMode = 0;
       Serial.println(F("[DISPLAY] Switching to display mode: CLOCK (from Weather)"));
     }
-  } else if (displayMode == 2) {  // Weather Description 
+  } else if (displayMode == 2) {  // Weather Description
     if (countdownEnabled && !countdownFinished && ntpSyncSuccessful) {
       displayMode = 3;
       Serial.println(F("[DISPLAY] Switching to display mode: COUNTDOWN (from Description)"));
@@ -1748,16 +1748,20 @@ void loop() {
 
 
 
+
   // --- WEATHER DESCRIPTION Display Mode ---
   if (displayMode == 2 && showWeatherDescription && weatherAvailable && weatherDescription.length() > 0) {
     String desc = weatherDescription;
-    desc.toUpperCase();
+
+    // prepare safe buffer
+    static char descBuffer[128];  // large enough for OWM translations
+    desc.toCharArray(descBuffer, sizeof(descBuffer));
 
     if (desc.length() > 8) {
       if (!descScrolling) {
         P.displayClear();
         textEffect_t actualScrollDirection = getEffectiveScrollDirection(PA_SCROLL_LEFT, flipDisplay);
-        P.displayScroll(desc.c_str(), PA_CENTER, actualScrollDirection, GENERAL_SCROLL_SPEED);
+        P.displayScroll(descBuffer, PA_CENTER, actualScrollDirection, GENERAL_SCROLL_SPEED);
         descScrolling = true;
         descScrollEndTime = 0;  // reset end time at start
       }
@@ -1780,7 +1784,7 @@ void loop() {
       if (descStartTime == 0) {
         P.setTextAlignment(PA_CENTER);
         P.setCharSpacing(1);
-        P.print(desc.c_str());
+        P.print(descBuffer);
         descStartTime = millis();
       }
       if (millis() - descStartTime > descriptionDuration) {
@@ -2022,7 +2026,7 @@ void loop() {
         P.displayAnimate();
       }
 
- // --- NEW: SINGLE-LINE COUNTDOWN LOGIC ---
+      // --- NEW: SINGLE-LINE COUNTDOWN LOGIC ---
       else {
         long days = timeRemaining / (24 * 3600);
         long hours = (timeRemaining % (24 * 3600)) / 3600;
@@ -2052,9 +2056,9 @@ void loop() {
         } else {
           sprintf(buf, "%s IN: %02ldH %02ldM %02ldS", label.c_str(), hours, minutes, seconds);
         }
-        
+
         String fullString = String(buf);
-        
+
         // Display the full string and scroll it
         P.displayClear();
         P.setTextAlignment(PA_LEFT);
@@ -2074,14 +2078,14 @@ void loop() {
         yield();
         return;
       }
-  }
+    }
 
-  // Keep alignment reset just in case
-  P.setTextAlignment(PA_CENTER);
-  P.setCharSpacing(1);
-  yield();
-  return;
-}  // End of if (displayMode == 3 && ...)
+    // Keep alignment reset just in case
+    P.setTextAlignment(PA_CENTER);
+    P.setCharSpacing(1);
+    yield();
+    return;
+  }  // End of if (displayMode == 3 && ...)
 
 
   // --- NIGHTSCOUT Display Mode ---
@@ -2197,6 +2201,7 @@ void loop() {
         "et",  // Estonian
         "fi",  // Finnish
         "fr",  // French
+        "ga",  // Irish
         "hr",  // Croatian
         "hu",  // Hungarian
         "it",  // Italian

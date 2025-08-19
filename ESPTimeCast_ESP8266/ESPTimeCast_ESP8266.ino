@@ -68,7 +68,7 @@ int dimBrightness = 2;  // Dimming level (0-15)
 bool countdownEnabled = false;
 time_t countdownTargetTimestamp = 0;  // Unix timestamp
 char countdownLabel[64] = "";         // Label for the countdown
-bool isDramaticCountdown = true;     // Default to the dramatic countdown mode
+bool isDramaticCountdown = true;      // Default to the dramatic countdown mode
 
 // State management
 bool weatherCycleStarted = false;
@@ -267,8 +267,8 @@ void loadConfig() {
 
     countdownEnabled = countdownObj["enabled"] | false;
     countdownTargetTimestamp = countdownObj["targetTimestamp"] | 0;
-    isDramaticCountdown = countdownObj["isDramaticCountdown"] | true; 
-    
+    isDramaticCountdown = countdownObj["isDramaticCountdown"] | true;
+
 
     JsonVariant labelVariant = countdownObj["label"];
     if (labelVariant.isNull() || !labelVariant.is<const char *>()) {
@@ -286,7 +286,7 @@ void loadConfig() {
     countdownEnabled = false;
     countdownTargetTimestamp = 0;
     strcpy(countdownLabel, "");
-    isDramaticCountdown = true; 
+    isDramaticCountdown = true;
     Serial.println(F("[CONFIG] Countdown object not found, defaulting to disabled."));
     countdownFinished = false;
   }
@@ -928,30 +928,30 @@ void setupWebServer() {
     request->send(200, "application/json", "{\"ok\":true}");
   });
 
-server.on("/set_dramatic_countdown", HTTP_POST, [](AsyncWebServerRequest *request) {
-  bool enableDramaticNow = false;
-  if (request->hasParam("value", true)) {
-    String v = request->getParam("value", true)->value();
-    enableDramaticNow = (v == "1" || v == "true" || v == "on");
-  }
+  server.on("/set_dramatic_countdown", HTTP_POST, [](AsyncWebServerRequest *request) {
+    bool enableDramaticNow = false;
+    if (request->hasParam("value", true)) {
+      String v = request->getParam("value", true)->value();
+      enableDramaticNow = (v == "1" || v == "true" || v == "on");
+    }
 
-  // Check if the state has changed
-  if (isDramaticCountdown == enableDramaticNow) {
-    Serial.println(F("[WEBSERVER] Dramatic Countdown state unchanged, ignoring."));
+    // Check if the state has changed
+    if (isDramaticCountdown == enableDramaticNow) {
+      Serial.println(F("[WEBSERVER] Dramatic Countdown state unchanged, ignoring."));
+      request->send(200, "application/json", "{\"ok\":true}");
+      return;
+    }
+
+    // Update the global variable
+    isDramaticCountdown = enableDramaticNow;
+
+    // Call saveCountdownConfig with only the existing parameters.
+    // It will read the updated global variable 'isDramaticCountdown'.
+    saveCountdownConfig(countdownEnabled, countdownTargetTimestamp, countdownLabel);
+
+    Serial.printf("[WEBSERVER] Set Dramatic Countdown to %d\n", isDramaticCountdown);
     request->send(200, "application/json", "{\"ok\":true}");
-    return;
-  }
-
-  // Update the global variable
-  isDramaticCountdown = enableDramaticNow;
-  
-  // Call saveCountdownConfig with only the existing parameters.
-  // It will read the updated global variable 'isDramaticCountdown'.
-  saveCountdownConfig(countdownEnabled, countdownTargetTimestamp, countdownLabel);
-
-  Serial.printf("[WEBSERVER] Set Dramatic Countdown to %d\n", isDramaticCountdown);
-  request->send(200, "application/json", "{\"ok\":true}");
-});
+  });
 
 
   server.begin();
@@ -1142,7 +1142,7 @@ String buildWeatherURL() {
 
   String langForAPI = String(language);
 
-  if (langForAPI == "eo" || langForAPI == "sw" || langForAPI == "ja") {
+  if (langForAPI == "eo" || langForAPI == "ga" || langForAPI == "sw" || langForAPI == "ja") {
     langForAPI = "en";
   }
   base += "&lang=" + langForAPI;
@@ -1743,16 +1743,19 @@ void loop() {
   }
 
 
-
   // --- WEATHER DESCRIPTION Display Mode ---
   if (displayMode == 2 && showWeatherDescription && weatherAvailable && weatherDescription.length() > 0) {
     String desc = weatherDescription;
+
+    // prepare safe buffer
+    static char descBuffer[128];  // large enough for OWM translations
+    desc.toCharArray(descBuffer, sizeof(descBuffer));
 
     if (desc.length() > 8) {
       if (!descScrolling) {
         P.displayClear();
         textEffect_t actualScrollDirection = getEffectiveScrollDirection(PA_SCROLL_LEFT, flipDisplay);
-        P.displayScroll(desc.c_str(), PA_CENTER, actualScrollDirection, GENERAL_SCROLL_SPEED);
+        P.displayScroll(descBuffer, PA_CENTER, actualScrollDirection, GENERAL_SCROLL_SPEED);
         descScrolling = true;
         descScrollEndTime = 0;  // reset end time at start
       }
@@ -1775,7 +1778,7 @@ void loop() {
       if (descStartTime == 0) {
         P.setTextAlignment(PA_CENTER);
         P.setCharSpacing(1);
-        P.print(desc.c_str());
+        P.print(descBuffer);
         descStartTime = millis();
       }
       if (millis() - descStartTime > descriptionDuration) {
@@ -2016,7 +2019,7 @@ void loop() {
         P.displayAnimate();
       }
 
- // --- NEW: SINGLE-LINE COUNTDOWN LOGIC ---
+      // --- NEW: SINGLE-LINE COUNTDOWN LOGIC ---
       else {
         long days = timeRemaining / (24 * 3600);
         long hours = (timeRemaining % (24 * 3600)) / 3600;
@@ -2046,9 +2049,9 @@ void loop() {
         } else {
           sprintf(buf, "%s IN: %02ldH %02ldM %02ldS", label.c_str(), hours, minutes, seconds);
         }
-        
+
         String fullString = String(buf);
-        
+
         // Display the full string and scroll it
         P.displayClear();
         P.setTextAlignment(PA_LEFT);
@@ -2068,177 +2071,178 @@ void loop() {
         yield();
         return;
       }
-  }
-
-  // Keep alignment reset just in case
-  P.setTextAlignment(PA_CENTER);
-  P.setCharSpacing(1);
-  yield();
-  return;
-}  // End of if (displayMode == 3 && ...)
-
-
-// --- NIGHTSCOUT Display Mode ---
-if (displayMode == 4) {
-  String ntpField = String(ntpServer2);
-
-  // These static variables will retain their values between calls to this block
-  static unsigned long lastNightscoutFetchTime = 0;
-  const unsigned long NIGHTSCOUT_FETCH_INTERVAL = 150000;  // 2.5 minutes
-  static int currentGlucose = -1;
-  static String currentDirection = "?";
-
-  // Check if it's time to fetch new data or if we have no data yet
-  if (currentGlucose == -1 || millis() - lastNightscoutFetchTime >= NIGHTSCOUT_FETCH_INTERVAL) {
-    WiFiClientSecure client;
-    client.setInsecure();
-    HTTPClient https;
-    https.begin(client, ntpField);
-
-    https.setTimeout(5000);  // This sets both the connection and response timeout.
-
-    Serial.print("[HTTPS] Nightscout fetch initiated...\n");
-    int httpCode = https.GET();
-
-    if (httpCode == HTTP_CODE_OK) {
-      String payload = https.getString();
-      StaticJsonDocument<1024> doc;
-      DeserializationError error = deserializeJson(doc, payload);
-
-      if (!error && doc.is<JsonArray>() && doc.size() > 0) {
-        JsonObject firstReading = doc[0].as<JsonObject>();
-        currentGlucose = firstReading["glucose"] | firstReading["sgv"] | -1;
-        currentDirection = firstReading["direction"] | "?";
-
-        Serial.printf("Nightscout data fetched: mg/dL %d %s\n", currentGlucose, currentDirection.c_str());
-      } else {
-        Serial.println("Failed to parse Nightscout JSON");
-      }
-    } else {
-      Serial.printf("[HTTPS] GET failed, error: %s\n", https.errorToString(httpCode).c_str());
     }
 
-    https.end();
-    lastNightscoutFetchTime = millis();  // Update the timestamp
-  }
-
-  // Display the data we have, which is now stored in static variables
-  if (currentGlucose != -1) {
-    char arrow;
-    if (currentDirection == "Flat") arrow = 139;
-    else if (currentDirection == "SingleUp") arrow = 134;
-    else if (currentDirection == "DoubleUp") arrow = 135;
-    else if (currentDirection == "SingleDown") arrow = 136;
-    else if (currentDirection == "DoubleDown") arrow = 137;
-    else if (currentDirection == "FortyFiveUp") arrow = 138;
-    else if (currentDirection == "FortyFiveDown") arrow = 140;
-    else arrow = '?';
-
-    String displayText = String(currentGlucose) + String(arrow);
-
+    // Keep alignment reset just in case
     P.setTextAlignment(PA_CENTER);
     P.setCharSpacing(1);
-    P.print(displayText.c_str());
-
-    delay(weatherDuration);
-    advanceDisplayMode();
+    yield();
     return;
-  } else {
-    // If no data is available after the first fetch attempt, show an error and advance
-    P.setTextAlignment(PA_CENTER);
-    P.setCharSpacing(0);
-    P.print(F("?)"));
-    delay(2000);  // Wait 2 seconds before advancing
-    advanceDisplayMode();
-    return;
+  }  // End of if (displayMode == 3 && ...)
+
+
+  // --- NIGHTSCOUT Display Mode ---
+  if (displayMode == 4) {
+    String ntpField = String(ntpServer2);
+
+    // These static variables will retain their values between calls to this block
+    static unsigned long lastNightscoutFetchTime = 0;
+    const unsigned long NIGHTSCOUT_FETCH_INTERVAL = 150000;  // 2.5 minutes
+    static int currentGlucose = -1;
+    static String currentDirection = "?";
+
+    // Check if it's time to fetch new data or if we have no data yet
+    if (currentGlucose == -1 || millis() - lastNightscoutFetchTime >= NIGHTSCOUT_FETCH_INTERVAL) {
+      WiFiClientSecure client;
+      client.setInsecure();
+      HTTPClient https;
+      https.begin(client, ntpField);
+
+      https.setTimeout(5000);  // This sets both the connection and response timeout.
+
+      Serial.print("[HTTPS] Nightscout fetch initiated...\n");
+      int httpCode = https.GET();
+
+      if (httpCode == HTTP_CODE_OK) {
+        String payload = https.getString();
+        StaticJsonDocument<1024> doc;
+        DeserializationError error = deserializeJson(doc, payload);
+
+        if (!error && doc.is<JsonArray>() && doc.size() > 0) {
+          JsonObject firstReading = doc[0].as<JsonObject>();
+          currentGlucose = firstReading["glucose"] | firstReading["sgv"] | -1;
+          currentDirection = firstReading["direction"] | "?";
+
+          Serial.printf("Nightscout data fetched: mg/dL %d %s\n", currentGlucose, currentDirection.c_str());
+        } else {
+          Serial.println("Failed to parse Nightscout JSON");
+        }
+      } else {
+        Serial.printf("[HTTPS] GET failed, error: %s\n", https.errorToString(httpCode).c_str());
+      }
+
+      https.end();
+      lastNightscoutFetchTime = millis();  // Update the timestamp
+    }
+
+    // Display the data we have, which is now stored in static variables
+    if (currentGlucose != -1) {
+      char arrow;
+      if (currentDirection == "Flat") arrow = 139;
+      else if (currentDirection == "SingleUp") arrow = 134;
+      else if (currentDirection == "DoubleUp") arrow = 135;
+      else if (currentDirection == "SingleDown") arrow = 136;
+      else if (currentDirection == "DoubleDown") arrow = 137;
+      else if (currentDirection == "FortyFiveUp") arrow = 138;
+      else if (currentDirection == "FortyFiveDown") arrow = 140;
+      else arrow = '?';
+
+      String displayText = String(currentGlucose) + String(arrow);
+
+      P.setTextAlignment(PA_CENTER);
+      P.setCharSpacing(1);
+      P.print(displayText.c_str());
+
+      delay(weatherDuration);
+      advanceDisplayMode();
+      return;
+    } else {
+      // If no data is available after the first fetch attempt, show an error and advance
+      P.setTextAlignment(PA_CENTER);
+      P.setCharSpacing(0);
+      P.print(F("?)"));
+      delay(2000);  // Wait 2 seconds before advancing
+      advanceDisplayMode();
+      return;
+    }
   }
-}
 
-//DATE Display Mode
-else if (displayMode == 5 && showDate) {
+  //DATE Display Mode
+  else if (displayMode == 5 && showDate) {
 
-  // --- VALID DATE CHECK ---
-  if (timeinfo.tm_year < 120 || timeinfo.tm_mday <= 0 || timeinfo.tm_mon < 0 || timeinfo.tm_mon > 11) {
-    advanceDisplayMode();
-    return;  // skip drawing
-  }
-  // -------------------------
-  String dateString;
+    // --- VALID DATE CHECK ---
+    if (timeinfo.tm_year < 120 || timeinfo.tm_mday <= 0 || timeinfo.tm_mon < 0 || timeinfo.tm_mon > 11) {
+      advanceDisplayMode();
+      return;  // skip drawing
+    }
+    // -------------------------
+    String dateString;
 
-  // Get localized month names
-  const char *const *months = getMonthsOfYear(language);
-  String monthAbbr = String(months[timeinfo.tm_mon]).substring(0, 5);
-  monthAbbr.toLowerCase();
+    // Get localized month names
+    const char *const *months = getMonthsOfYear(language);
+    String monthAbbr = String(months[timeinfo.tm_mon]).substring(0, 5);
+    monthAbbr.toLowerCase();
 
-  // Add spaces between day digits
-  String dayString = String(timeinfo.tm_mday);
-  String spacedDay = "";
-  for (size_t i = 0; i < dayString.length(); i++) {
-    spacedDay += dayString[i];
-    if (i < dayString.length() - 1) spacedDay += " ";
-  }
+    // Add spaces between day digits
+    String dayString = String(timeinfo.tm_mday);
+    String spacedDay = "";
+    for (size_t i = 0; i < dayString.length(); i++) {
+      spacedDay += dayString[i];
+      if (i < dayString.length() - 1) spacedDay += " ";
+    }
 
-  // Function to check if day should come first for given language
-  auto isDayFirst = [](const String &lang) {
-    // Languages with DD-MM order
-    const char *dayFirstLangs[] = {
-      "af",  // Afrikaans
-      "cs",  // Czech
-      "da",  // Danish
-      "de",  // German
-      "eo",  // Esperanto
-      "es",  // Spanish
-      "et",  // Estonian
-      "fi",  // Finnish
-      "fr",  // French
-      "hr",  // Croatian
-      "hu",  // Hungarian
-      "it",  // Italian
-      "lt",  // Lithuanian
-      "lv",  // Latvian
-      "nl",  // Dutch
-      "no",  // Norwegian
-      "pl",  // Polish
-      "pt",  // Portuguese
-      "ro",  // Romanian
-      "sk",  // Slovak
-      "sl",  // Slovenian
-      "sr",  // Serbian
-      "sv",  // Swedish
-      "sw",  // Swahili
-      "tr"   // Turkish
+    // Function to check if day should come first for given language
+    auto isDayFirst = [](const String &lang) {
+      // Languages with DD-MM order
+      const char *dayFirstLangs[] = {
+        "af",  // Afrikaans
+        "cs",  // Czech
+        "da",  // Danish
+        "de",  // German
+        "eo",  // Esperanto
+        "es",  // Spanish
+        "et",  // Estonian
+        "fi",  // Finnish
+        "fr",  // French
+        "ga",  // Irish
+        "hr",  // Croatian
+        "hu",  // Hungarian
+        "it",  // Italian
+        "lt",  // Lithuanian
+        "lv",  // Latvian
+        "nl",  // Dutch
+        "no",  // Norwegian
+        "pl",  // Polish
+        "pt",  // Portuguese
+        "ro",  // Romanian
+        "sk",  // Slovak
+        "sl",  // Slovenian
+        "sr",  // Serbian
+        "sv",  // Swedish
+        "sw",  // Swahili
+        "tr"   // Turkish
+      };
+      for (auto lf : dayFirstLangs) {
+        if (lang.equalsIgnoreCase(lf)) {
+          return true;
+        }
+      }
+      return false;
     };
-    for (auto lf : dayFirstLangs) {
-      if (lang.equalsIgnoreCase(lf)) {
-        return true;
+
+    String langForDate = String(language);
+
+    if (langForDate == "ja") {
+      // Japanese: month number (spaced digits) + day + symbol
+      String spacedMonth = "";
+      String monthNum = String(timeinfo.tm_mon + 1);
+      dateString = monthAbbr + "  " + spacedDay + " ±";
+
+    } else {
+      if (isDayFirst(language)) {
+        dateString = spacedDay + "   " + monthAbbr;
+      } else {
+        dateString = monthAbbr + "   " + spacedDay;
       }
     }
-    return false;
-  };
 
-  String langForDate = String(language);
+    P.setTextAlignment(PA_CENTER);
+    P.setCharSpacing(0);
+    P.print(dateString);
 
-  if (langForDate == "ja") {
-    // Japanese: month number (spaced digits) + day + symbol
-    String spacedMonth = "";
-    String monthNum = String(timeinfo.tm_mon + 1);
-    dateString = monthAbbr + "  " + spacedDay + " ±";
-
-  } else {
-    if (isDayFirst(language)) {
-      dateString = spacedDay + "   " + monthAbbr;
-    } else {
-      dateString = monthAbbr + "   " + spacedDay;
+    if (millis() - lastSwitch > weatherDuration) {
+      advanceDisplayMode();
     }
   }
-
-  P.setTextAlignment(PA_CENTER);
-  P.setCharSpacing(0);
-  P.print(dateString);
-
-  if (millis() - lastSwitch > weatherDuration) {
-    advanceDisplayMode();
-  }
-}
-yield();
+  yield();
 }

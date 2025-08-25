@@ -20,8 +20,8 @@ The case front panel (3mm) can be laser cut!
 <img src="assets/image01.png" alt="3D Printable Case V1" width="320" />
 <img src="assets/image02.png" alt="3D Printable Case V2" width="320" />
 
-[![Printables Downloads](https://img.shields.io/badge/Printables-115%20Downloads-orange?logo=prusa)](https://www.printables.com/model/1344276-esptimecast-wi-fi-clock-weather-display)
-[![Cults3D Downloads](https://img.shields.io/badge/Cults3D-59%20Downloads-blue?logo=cults3d)](https://cults3d.com/en/3d-model/gadget/wifi-connected-led-matrix-clock-and-weather-station-esp8266-and-max7219)
+[![Printables Downloads](https://img.shields.io/badge/Printables-121%20Downloads-orange?logo=prusa)](https://www.printables.com/model/1344276-esptimecast-wi-fi-clock-weather-display)
+[![Cults3D Downloads](https://img.shields.io/badge/Cults3D-61%20Downloads-blue?logo=cults3d)](https://cults3d.com/en/3d-model/gadget/wifi-connected-led-matrix-clock-and-weather-station-esp8266-and-max7219)
 
 ---
 
@@ -275,6 +275,7 @@ If you enjoy this project, please consider supporting my work:
 
 [![Donate via PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg?logo=paypal)](https://www.paypal.me/officialuphoto)
 [![GitHub Sponsors](https://img.shields.io/badge/GitHub-Sponsor-fafbfc?logo=github&logoColor=ea4aaa)](https://github.com/sponsors/mfactory-osaka) 
+
 
 
 
